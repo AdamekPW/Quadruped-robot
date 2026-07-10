@@ -1,0 +1,50 @@
+# --- Artykuły / materiały źródłowe ---
+Articles/
+
+# --- Środowisko wirtualne Pythona ---
+.venv/
+venv/
+env/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# --- Cache narzędzi ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- Uczenie przez wzmacnianie / eksperymenty ---
+# Modele, checkpointy i logi treningowe (zwykle duże pliki binarne)
+runs/
+logs/
+outputs/
+checkpoints/
+wandb/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# --- MuJoCo / renderowanie ---
+*.mp4
+*.gif
+MUJOCO_LOG.TXT
+
+# --- IDE / system ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Sekrety / konfiguracja lokalna ---
+.env
+.env.local

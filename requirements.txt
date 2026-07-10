@@ -1,0 +1,21 @@
+# RoboDog — praca magisterska: nauka chodzenia robopsa (Reinforcement Learning)
+#
+# Instalacja (Windows, Python 3.12):
+#   py -3.12 -m venv .venv
+#   .venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# UWAGA: PyTorch z obsługą CUDA pobierany jest z dedykowanego indeksu poniżej.
+# Build cu128 jest zgodny ze sterownikiem NVIDIA (RTX 3060) użytym w projekcie.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# --- Deep learning ---
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+
+# --- Symulacja fizyki i środowiska RL ---
+mujoco==3.10.0
+gymnasium==1.3.0
+
+# --- Numeryka ---
+numpy==2.4.4
