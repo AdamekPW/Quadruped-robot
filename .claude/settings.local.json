@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where pdftoppm.exe)",
+      "Bash(where pdftoppm *)",
+      "Read(//c/Program Files/**)",
+      "Bash(choco list *)",
+      "Bash(pip show *)"
+    ]
+  }
+}
