@@ -5,7 +5,13 @@
       "Bash(where pdftoppm *)",
       "Read(//c/Program Files/**)",
       "Bash(choco list *)",
-      "Bash(pip show *)"
+      "Bash(pip show *)",
+      "Bash(python -c \"import pypdf; print\\('pypdf ok'\\)\")",
+      "Bash(python -c \"import pdfplumber; print\\('pdfplumber ok'\\)\")",
+      "Bash(python -c \"import fitz; print\\('pymupdf ok'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(cd \"C:/Users/szulc/OneDrive/Pulpit/RoboDog\" && rm -f scratch_pdf.txt)",
+      "mcp__visualize__read_me"
     ]
   }
 }
