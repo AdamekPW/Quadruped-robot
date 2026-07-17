@@ -8,8 +8,8 @@ Ant to tymczasowy zamiennik robopsa — ma 4 nogi i 8 sterowanych stawów.
 Docelowo w to miejsce wejdzie własny model MJCF robopsa.
 
 Uruchomienie:
-    .venv\\Scripts\\activate
-    python scripts\\demo_gym_ant.py
+    conda activate robodog
+    python scripts/demo_gym_ant.py
 
 Okno zamknij krzyżykiem lub Ctrl+C w terminalu.
 """

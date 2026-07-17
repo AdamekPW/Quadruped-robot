@@ -1,0 +1,47 @@
+# RoboDog — definicja środowiska Conda (źródło prawdy o zależnościach).
+#
+# Utworzenie środowiska:
+#   conda env create -f environment.yml
+#   conda activate robodog
+#   pip install -e .          # pakiet robodog w trybie edytowalnym
+#
+# Aktualizacja po zmianie tego pliku:
+#   conda env update -f environment.yml --prune
+#
+# UWAGA — dlaczego torch siedzi w sekcji `pip`, a nie w `dependencies`:
+# projekt PyTorch nie publikuje już paczek dla Condy (kanał `pytorch` został
+# wygaszony). Jedyna oficjalna droga to koła (wheels) z indeksu PyTorcha, więc
+# Conda zarządza Pythonem, a pip — samym torchem. To jest zalecany układ.
+#
+# Build cu128 = CUDA 12.8. Jest wymagany przez GPU Blackwell (RTX 5060 Ti,
+# architektura sm_120) — starsze buildy CUDA na tej karcie nie wystartują.
+name: robodog
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12
+  - pip
+
+  - pip:
+      # Indeks z buildami CUDA. Musi być przed pinami torcha.
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+
+      # --- Deep learning ---
+      - torch==2.11.0+cu128
+      - torchvision==0.26.0+cu128
+
+      # --- Symulacja fizyki i środowiska RL ---
+      - mujoco==3.10.0
+      - gymnasium==1.3.0
+
+      # --- Renderowanie środowisk MuJoCo (podgląd / zapis wideo) ---
+      - imageio==2.37.3
+      - imageio-ffmpeg==0.6.0
+
+      # --- Numeryka ---
+      - numpy==2.4.4
+
+      # --- Testy ---
+      - pytest==9.1.1

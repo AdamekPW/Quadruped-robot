@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robodog"
+version = "0.1.0"
+description = "Nauka chodzenia robopsa metodą uczenia przez wzmacnianie (praca magisterska)"
+readme = "README.md"
+requires-python = ">=3.12"
+
+# Celowo pusto. Zależności (torch, mujoco, ...) są w environment.yml, bo pin
+# torcha wymaga dodatkowego indeksu CUDA, którego pyproject.toml nie potrafi
+# przenośnie wyrazić. Trzymanie ich w dwóch miejscach skończyłoby się rozjazdem.
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

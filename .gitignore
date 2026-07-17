@@ -1,10 +1,16 @@
 # --- Artykuły / materiały źródłowe ---
 articles/
 
-# --- Środowisko wirtualne Pythona ---
+# --- Środowisko Pythona ---
+# Środowiska Condy trzymamy poza repo (~/miniforge3/envs/robodog), ale gdyby
+# ktoś utworzył je lokalnie przez `conda env create -p ./envs`, ma być ignorowane.
 .venv/
 venv/
 env/
+envs/
+.conda/
+# Plik tymczasowy, który Conda tworzy przy przetwarzaniu sekcji `pip:`
+condaenv.*.requirements.txt
 
 # --- Python ---
 __pycache__/

@@ -13,8 +13,8 @@ opada pod wpływem grawitacji — chodzi o to, żeby poznać interfejs symulator
 To najlepszy sposób, żeby zobaczyć "jak wygląda praca w środowisku MuJoCo".
 
 Uruchomienie:
-    .venv\\Scripts\\activate
-    python scripts\\demo_mujoco_viewer.py
+    conda activate robodog
+    python scripts/demo_mujoco_viewer.py
 """
 import gymnasium as gym
 import mujoco.viewer
