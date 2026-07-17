@@ -6,9 +6,11 @@ Praca magisterska: **nauka chodzenia robopsa metodą uczenia przez wzmacnianie (
 
 - **Python 3.12** (środowisko zarządzane przez **Condę** — Miniforge)
 - **PyTorch 2.11 (CUDA 12.8 / cu128)** — sieci neuronowe i trening
+- **mjlab** — framework RL: API w stylu Isaac Lab + **MuJoCo Warp** (symulacja
+  tysięcy środowisk równolegle na GPU). Patrz [docs/mjlab-architektura.md](docs/mjlab-architektura.md).
 - **MuJoCo** — symulator fizyki
-- **Gymnasium** — API środowisk RL
-- **Algorytm:** własna implementacja **PPO** w PyTorch
+- **Algorytm:** własna implementacja **PPO** w PyTorch (wkład własny pracy;
+  `rsl-rl` z mjlab służy jako punkt odniesienia — patrz „Plan" niżej)
 - **GPU:** NVIDIA RTX 5060 Ti (architektura Blackwell, `sm_120`)
 
 > Build `cu128` nie jest przypadkowy: karty Blackwell wymagają CUDA ≥ 12.8, na
@@ -23,10 +25,10 @@ RoboDog/
 │   ├── robodog.xml     #   Definicja MJCF (geometria, stawy, siłowniki)
 │   └── meshes/         #   Siatki 3D i tekstury
 ├── src/robodog/        # Główny pakiet (instalowalny: pip install -e .)
-│   ├── envs/           #   Środowiska Gymnasium owijające MuJoCo (obserwacje, akcje, nagroda)
+│   ├── envs/           #   Konfiguracje środowisk mjlab (obserwacje, nagrody, zdarzenia)
 │   ├── algorithms/     #   Własne implementacje RL (PPO) + sieci actor/critic
 │   └── utils/          #   Wczytywanie konfiguracji, logowanie, seedy
-├── scripts/            # Punkty wejścia CLI: train.py, evaluate.py, record_video.py
+├── scripts/            # Punkty wejścia CLI (docelowo: własny train.py z naszym PPO)
 ├── notebooks/          # Analiza wyników, wykresy krzywych uczenia do pracy
 ├── tests/              # Testy środowiska (kształty obserwacji, granice akcji)
 ├── runs/               # Logi / TensorBoard (ignorowane w git)
@@ -55,7 +57,14 @@ Następnie środowisko projektu:
 conda env create -f environment.yml
 conda activate robodog
 pip install -e .
+
+# WYMAGANE: obejście regresji w mujoco-warp 3.10.0.2, która wywala trening
+# przy num_envs >= ~176. Szczegóły: docs/mjlab-architektura.md, sekcja 6.
+pip install --no-deps mujoco-warp==3.10.0.1
 ```
+
+Poprawność instalacji sprawdza `pytest` (patrz „Testy") — w tym obecność
+właściwej wersji `mujoco-warp`.
 
 Sprawdzenie, czy GPU jest widoczne:
 
@@ -77,15 +86,20 @@ Conda zarządza Pythonem i środowiskiem, a sam torch dociąga pip z sekcji `pip
 w `environment.yml`. To układ zalecany przez samo PyTorch i standardowo
 akceptowany na klastrach obliczeniowych.
 
-## Demo
-
-Dwa skrypty do oswojenia się z narzędziami (używają `Ant-v5` — czworonoga
-dostarczanego z Gymnasium, jako tymczasowego zamiennika robopsa):
+## Trening
 
 ```bash
-python scripts/demo_gym_ant.py        # pętla RL reset() -> step() z losową polityką
-python scripts/demo_mujoco_viewer.py  # interaktywny viewer MuJoCo
+# Trening referencyjny (baseline) na gotowym PPO z rsl-rl:
+python -m mjlab.scripts.train Mjlab-Velocity-Flat-Unitree-Go1 \
+  --env.scene.num-envs 4096 \
+  --agent.logger tensorboard
+
+# Podgląd nauczonej polityki:
+python -m mjlab.scripts.play Mjlab-Velocity-Flat-Unitree-Go1 --help
 ```
+
+> `--agent.logger tensorboard` jest świadome: domyślnym loggerem mjlab jest
+> **wandb**, który wysyła przebiegi treningu na zewnętrzny serwis i wymaga konta.
 
 ## Testy
 
@@ -93,7 +107,20 @@ python scripts/demo_mujoco_viewer.py  # interaktywny viewer MuJoCo
 pytest
 ```
 
+## Plan
+
+Cel: **Unitree Go2** (wymóg promotora) chodzący dzięki **własnej implementacji PPO**.
+Droga do tego jest podzielona na etapy — orientacyjne, nie sztywne:
+
+1. ✅ Środowisko (Conda, CUDA na Blackwellu, mjlab) — działa, potwierdzone testami.
+2. 🚧 **Baseline Go1 na `rsl-rl`** — mjlab dostarcza Go1 od ręki. Daje punkt
+   odniesienia: wiadomo, jak wygląda poprawnie nauczony chód i ile to trwa.
+3. ⬜ **Port Go2** — mjlab **nie ma Go2**; model trzeba przenieść z
+   [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie).
+   Szczegóły: [docs/mjlab-architektura.md](docs/mjlab-architektura.md), sekcja 5.
+4. ⬜ **Własny PPO** — podmiana `rsl-rl` na własną implementację i porównanie z
+   baseline'em. To jest wkład własny pracy.
+
 ## Status
 
-🚧 Projekt w fazie inicjalizacji — struktura szkieletowa. Implementacja env,
-modelu robopsa i algorytmu PPO w kolejnych krokach.
+🚧 Środowisko gotowe i zweryfikowane. Trening baseline'u w toku.

@@ -32,9 +32,28 @@ dependencies:
       - torch==2.11.0+cu128
       - torchvision==0.26.0+cu128
 
+      # --- Framework RL: mjlab ---
+      # Isaac Lab API (opis środowiska z klocków: obserwacje / nagrody / zdarzenia)
+      # + MuJoCo Warp (mjwarp) = MuJoCo liczone na GPU, tysiące środowisk równolegle.
+      # Pociąga za sobą: mujoco-warp, warp-lang, rsl-rl-lib (PPO), viser, wandb.
+      # Uwaga: mjlab wymaga mujoco~=3.10.0 i numpy<2.5 — piny niżej są z tym zgodne.
+      #
+      # !!! UWAGA — WYMAGANY KROK PO INSTALACJI (patrz docs/mjlab-architektura.md) !!!
+      # mjlab ciągnie mujoco-warp 3.10.0.2, które ma REGRESJĘ: zadania `velocity`
+      # (Go1, G1) wywalają się z CUDA error 700 przy num_envs >= ~176. Trening
+      # wymaga 4096, więc to blokuje wszystko. Działa 3.10.0.1, ale mjlab pinuje
+      # `mujoco-warp>=3.10.0.2`, więc pip NIE potrafi tego rozwiązać
+      # (ResolutionImpossible) i nie da się tego wyrazić tutaj. Po utworzeniu
+      # środowiska trzeba ręcznie:
+      #
+      #     pip install --no-deps mujoco-warp==3.10.0.1
+      #
+      # `pip check` będzie po tym zgłaszać złamany pin — to oczekiwane.
+      # Pilnuje tego test: tests/test_environment.py::test_mujoco_warp_bez_regresji
+      - mjlab==1.5.1
+
       # --- Symulacja fizyki i środowiska RL ---
       - mujoco==3.10.0
-      - gymnasium==1.3.0
 
       # --- Renderowanie środowisk MuJoCo (podgląd / zapis wideo) ---
       - imageio==2.37.3

@@ -5,6 +5,9 @@ poprawnie. Sens: po przeniesieniu projektu na inną maszynę (np. klaster
 uczelniany) jedno `pytest` odpowiada na pytanie "czy stack działa", zanim
 zmarnujesz godziny na debugowanie treningu, który nie miał prawa ruszyć.
 """
+
+from importlib.metadata import version
+
 import pytest
 
 
@@ -17,13 +20,11 @@ def test_robodog_package_is_importable():
 
 def test_key_dependency_versions():
     """Piny z environment.yml zgadzają się z tym, co faktycznie zainstalowano."""
-    import gymnasium
     import mujoco
     import torch
 
     assert torch.__version__.startswith("2.11.0")
     assert mujoco.__version__.startswith("3.10.0")
-    assert gymnasium.__version__.startswith("1.3.0")
 
 
 def test_torch_sees_gpu():
@@ -41,17 +42,33 @@ def test_torch_sees_gpu():
     assert torch.matmul(x, x).isfinite().all().item()
 
 
-def test_mujoco_environment_works():
-    """Ant-v5 = czworonóg z Gymnasium, tymczasowy zamiennik robopsa."""
-    import gymnasium as gym
+def test_mujoco_warp_has_no_known_regression():
+    """mujoco-warp MUSI być 3.10.0.1 — 3.10.0.2 ma regresję blokującą trening.
 
-    env = gym.make("Ant-v5")
-    try:
-        obs, _ = env.reset(seed=0)
-        assert obs.shape == env.observation_space.shape
+    W 3.10.0.2 zadania `velocity` (Go1 i G1) padają z CUDA error 700 (illegal
+    memory access) przy num_envs >= ~176; przy 160 jeszcze działa, a cartpole
+    (bez randomizacji fizyki) działa nawet przy 4096. Ścieżka awarii:
+    zdarzenia startowe randomizacji -> sim.recompute_constants() -> smooth.crb().
 
-        obs, reward, terminated, truncated, _ = env.step(env.action_space.sample())
-        assert obs.shape == env.observation_space.shape
-        assert isinstance(float(reward), float)
-    finally:
-        env.close()
+    To blokuje projekt, bo trening potrzebuje 4096 środowisk.
+
+    mjlab pinuje `mujoco-warp>=3.10.0.2`, więc pip sam zainstaluje zepsutą
+    wersję, a poprawnej nie da się zapisać w environment.yml (pip zgłasza
+    ResolutionImpossible). Ten test jest jedynym zabezpieczeniem — szczegóły
+    w docs/mjlab-architektura.md.
+    """
+    assert version("mujoco-warp") == "3.10.0.1", (
+        "Wykryto mujoco-warp != 3.10.0.1. Jeśli to 3.10.0.2, trening padnie przy "
+        "num_envs >= ~176. Napraw: pip install --no-deps mujoco-warp==3.10.0.1"
+    )
+
+
+def test_mjlab_quadruped_task_is_registered():
+    """Zadanie chodzenia czworonoga musi być widoczne w rejestrze mjlab.
+
+    Go1, nie Go2 — mjlab nie dostarcza Go2 (patrz docs/mjlab-architektura.md).
+    Ten test trzeba będzie rozszerzyć o Go2 po wykonaniu portu.
+    """
+    from mjlab.tasks.registry import list_tasks
+
+    assert "Mjlab-Velocity-Flat-Unitree-Go1" in list_tasks()
