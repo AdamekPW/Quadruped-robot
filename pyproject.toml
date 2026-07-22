@@ -14,8 +14,21 @@ requires-python = ">=3.12"
 # przenośnie wyrazić. Trzymanie ich w dwóch miejscach skończyłoby się rozjazdem.
 dependencies = []
 
+# Rejestracja zadań RoboDoga w mjlab: mjlab przy imporcie ładuje pakiety z tej
+# grupy entry-pointów i uruchamia ich rejestrację (register_mjlab_task).
+[project.entry-points."mjlab.tasks"]
+robodog = "robodog.tasks"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pyright]
+# mujoco to natywne wiązania C++ — enumy (mjtJoint, mjtObj, ...) i wiele funkcji
+# powstają dynamicznie, więc analizator statyczny zgłasza fałszywe
+# "is not a known attribute of module". Wyciszamy tę regułę globalnie.
+# Uwaga: dotyczy to wszystkich dostępów do atrybutów, więc realna literówka
+# w nazwie atrybutu też nie zostanie tu wykryta.
+reportAttributeAccessIssue = "none"
