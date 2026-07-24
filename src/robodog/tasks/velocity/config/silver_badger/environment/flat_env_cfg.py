@@ -1,18 +1,9 @@
-"""Konfiguracja zadania velocity (śledzenie zadanej prędkości) dla Silver Badgera.
-
-Wariant FLAT (płaski teren), wzorowany na `config/go1/env_cfgs.py` z mjlab, ale
-z nazwami geometrii/site/ciał Silver Badgera i bez elementów specyficznych dla
-Go1 (granularne kolizje ud/goleni, których nasz model nie ma).
-
-Uwaga o kręgosłupie: `spine_joint` jest tu traktowany jak zwykły siłownik —
-polityka steruje nim razem z nogami (wariant RUCHOMY). Wariant USZTYWNIONY
-(blokada kręgosłupa) dodamy osobno — to niezależna zmienna studium porównawczego.
-"""
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import TerminationTermCfg
+from mjlab.managers.event_manager import EventTermCfg
 from mjlab.sensor import (
     ContactMatch,
     ContactSensorCfg,
@@ -23,15 +14,12 @@ from mjlab.sensor import (
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
 
-from robodog.assets.robots.silver_badger.silver_badger_constants import (
+from robodog.assets.robots.silver_badger.constants import (
     SILVER_BADGER_ACTION_SCALE,
     get_silver_badger_robot_cfg,
 )
 
-# Nazwy stóp w modelu Silver Badgera (geomy kolizyjne i site pokrywają się nazwą).
-FOOT_SITES = ("RL_foot", "RR_foot", "FR_foot", "FL_foot")
-FOOT_GEOMS = ("RL_foot", "RR_foot", "FR_foot", "FL_foot")
-
+from .constants import FOOT_SITES, FOOT_GEOMS
 
 def silver_badger_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     """Tworzy konfigurację zadania velocity Silver Badger na płaskim terenie."""

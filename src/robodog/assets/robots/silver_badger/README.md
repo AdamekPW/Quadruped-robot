@@ -1,1 +1,0 @@
-Adapted from: https://github.com/nico-bohlinger/one_policy_to_run_them_all/tree/main/one_policy_to_run_them_all/environments/badger/data
