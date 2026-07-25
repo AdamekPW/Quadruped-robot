@@ -11,7 +11,6 @@ from mjlab.sensor import (
     RingPatternCfg,
     TerrainHeightSensorCfg,
 )
-from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
 
 from robodog.assets.robots.silver_badger.constants import (
@@ -43,6 +42,8 @@ def silver_badger_rough_env_cfg(
             porównawczego. Ustaw False, by wrócić do kręgosłupa RUCHOMEGO.
     """
     cfg = make_velocity_env_cfg()
+
+    cfg.scene.num_envs = 4096
 
     # --- Robot ---
     cfg.scene.entities = {"robot": get_silver_badger_robot_cfg()}
@@ -153,6 +154,7 @@ def silver_badger_rough_env_cfg(
     # --- Tryb play (podgląd nauczonej polityki) ---
     if play:
         cfg.episode_length_s = int(1e9)
+        cfg.scene.num_envs = 50  # podgląd: kilka robotów wystarczy
         cfg.observations["actor"].enable_corruption = False
         cfg.events.pop("push_robot", None)
         cfg.terminations.pop("out_of_terrain_bounds", None)

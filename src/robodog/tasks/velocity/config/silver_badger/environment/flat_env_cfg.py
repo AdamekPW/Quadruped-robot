@@ -19,11 +19,24 @@ from robodog.assets.robots.silver_badger.constants import (
     get_silver_badger_robot_cfg,
 )
 
-from .constants import FOOT_SITES, FOOT_GEOMS
+from .constants import FOOT_SITES, FOOT_GEOMS, LEG_ACTUATOR_PATTERNS
 
-def silver_badger_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
-    """Tworzy konfigurację zadania velocity Silver Badger na płaskim terenie."""
+def silver_badger_flat_env_cfg(
+    play: bool = False,
+    lock_spine: bool = True,
+) -> ManagerBasedRlEnvCfg:
+    """Tworzy konfigurację zadania velocity Silver Badger na płaskim terenie.
+
+    Args:
+        play: tryb podglądu (długi epizod, bez zakłóceń/pchania).
+        lock_spine: gdy True (domyślnie) kręgosłup jest USZTYWNIONY — polityka
+            steruje tylko 12 stawami nóg, a `spine_joint` trzyma się neutralnego
+            kąta 0 przez swój siłownik PD. Ustaw False, by kręgosłup był RUCHOMY
+            (13. siłownik sterowany polityką). Patrz też wariant rough.
+    """
     cfg = make_velocity_env_cfg()
+
+    cfg.scene.num_envs = 4096
 
     # --- Robot ---
     cfg.scene.entities = {"robot": get_silver_badger_robot_cfg()}
@@ -77,10 +90,15 @@ def silver_badger_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.observations["actor"].nan_policy = "sanitize"
     cfg.observations["critic"].nan_policy = "sanitize"
 
-    # --- Akcje: skala per-siłownik (0.25 * limit_siły / sztywność) ---
+    # --- Akcje: skala per-siłownik; kręgosłup ewentualnie poza polityką ---
     joint_pos_action = cfg.actions["joint_pos"]
     assert isinstance(joint_pos_action, JointPositionActionCfg)
-    joint_pos_action.scale = SILVER_BADGER_ACTION_SCALE
+    action_scale = dict(SILVER_BADGER_ACTION_SCALE)
+    if lock_spine:
+        # Usztywnienie: polityka nie dostaje kanału na kręgosłup (tylko nogi).
+        joint_pos_action.actuator_names = LEG_ACTUATOR_PATTERNS
+        action_scale.pop("spine_joint", None)
+    joint_pos_action.scale = action_scale
 
     # --- Nagrody: podpięcie pod nazwy Silver Badgera ---
     cfg.rewards["upright"].params["asset_cfg"].body_names = ("trunk",)
@@ -134,6 +152,7 @@ def silver_badger_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # --- Tryb play (podgląd nauczonej polityki) ---
     if play:
         cfg.episode_length_s = int(1e9)
+        cfg.scene.num_envs = 50  # podgląd: kilka robotów wystarczy
         cfg.observations["actor"].enable_corruption = False
         cfg.events.pop("push_robot", None)
         cfg.curriculum = {}
