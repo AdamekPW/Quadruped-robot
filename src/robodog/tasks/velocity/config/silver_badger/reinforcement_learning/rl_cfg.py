@@ -36,7 +36,7 @@ def silver_badger_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
             value_loss_coef=1.0,
             use_clipped_value_loss=True,
             clip_param=0.2,
-            entropy_coef=0.01,
+            entropy_coef=0.02,
             num_learning_epochs=5,
             num_mini_batches=4,
             learning_rate=1.0e-3,
@@ -53,3 +53,23 @@ def silver_badger_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
         num_steps_per_env=24,
         max_iterations=10_000,
     )
+
+
+# Ścieżki importu własnych sieci (rozwiązywane przez rsl-rl `resolve_callable`).
+_CNN_ACTOR = "robodog.algorithms.networks.cnn.cnn_actor:CNN_actor"
+_CNN_CRITIC = "robodog.algorithms.networks.cnn.cnn_critic:CNN_critic"
+
+
+def silver_badger_cnn_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+    """Wariant runnera z WŁASNYMI sieciami CNN (enkoder nad mapą terenu).
+
+    Te same hiperparametry PPO co baseline — podmieniamy tylko `class_name`
+    actora i critica na nasze klasy. `obs_groups` zostaje domyślne
+    (`actor→["actor"], critic→["critic"]`); grupę-obraz `height_scan` sieci
+    czytają wprost z obserwacji (MLPModel nie przyjmuje grup 2D). Wymaga zadania
+    zbudowanego z `terrain_as_image=True`.
+    """
+    cfg = silver_badger_ppo_runner_cfg()
+    cfg.actor.class_name = _CNN_ACTOR
+    cfg.critic.class_name = _CNN_CRITIC
+    return cfg

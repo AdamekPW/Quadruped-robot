@@ -3,6 +3,7 @@ from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import TerminationTermCfg
 from mjlab.managers.event_manager import EventTermCfg
+from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.sensor import (
     ContactMatch,
     ContactSensorCfg,
@@ -18,12 +19,19 @@ from robodog.assets.robots.silver_badger.constants import (
     get_silver_badger_robot_cfg,
 )
 
-from .constants import FOOT_SITES, FOOT_GEOMS, LEG_ACTUATOR_PATTERNS
+from .constants import (
+    FOOT_SITES,
+    FOOT_GEOMS,
+    LEG_ACTUATOR_PATTERNS,
+    TERRAIN_SCAN_GRID_HW,
+)
+from .observations import height_scan_image
 
 
 def silver_badger_rough_env_cfg(
     play: bool = False,
     lock_spine: bool = True,
+    terrain_as_image: bool = False,
 ) -> ManagerBasedRlEnvCfg:
     """Zadanie velocity Silver Badger na terenie NIEPŁASKIM (rough + curriculum).
 
@@ -40,6 +48,11 @@ def silver_badger_rough_env_cfg(
             steruje tylko 12 stawami nóg, a `spine_joint` trzyma się neutralnego
             kąta 0 przez swój siłownik PD (kp=20). To pierwsza „noga" studium
             porównawczego. Ustaw False, by wrócić do kręgosłupa RUCHOMEGO.
+        terrain_as_image: gdy False (domyślnie) `height_scan` jest płaskim
+            wektorem sklejonym z resztą obserwacji (baseline pod MLP). Gdy True,
+            skan terenu jest WYDZIELONY do osobnej grupy obserwacji `height_scan`
+            o kształcie obrazu `(B, 1, H, W)` — pod własną sieć konwolucyjną.
+            Wymaga wtedy ustawienia `obs_groups` w rl_cfg, żeby runner podał tę grupę modelowi.
     """
     cfg = make_velocity_env_cfg()
 
@@ -90,9 +103,53 @@ def silver_badger_rough_env_cfg(
     ):
         cfg.scene.terrain.terrain_generator.curriculum = True
 
+    # Start od NAJŁATWIEJSZEGO terenu (poziom 0), nie rozrzut 0-5. Inaczej część
+    # robotów trafia na starcie na trudny teren, gdzie losowa polityka się wywraca
+    # i uczy się „nie ruszaj się = bezpiecznie" — a raz zbiegłszy do bezruchu, nie
+    # wychodzi z niego nawet po degradacji na łatwy teren. Startując od 0 robot
+    # najpierw uczy się chodzić (jak na flat), a curriculum podnosi trudność potem.
+    if cfg.scene.terrain is not None:
+        cfg.scene.terrain.max_init_terrain_level = 0
+
+    # --- Komendy: więcej marszu NA WPROST + rzadsza zmiana kierunku ---
+    # Awans w curriculum terenu wymaga >4 m przemieszczenia NETTO od punktu startu
+    # w epizodzie (`terrain_levels_vel`, próg = size/2). Domyślnie tylko 20% env-ów
+    # dostaje komendę „prosto", a kierunek losuje się co 3-8 s → robot dużo chodzi,
+    # ale netto <4 m i teren tkwi na poziomie 0. Zwiększamy udział marszu prosto i
+    # wydłużamy okno komendy, żeby robot faktycznie pokonywał dystans i awansował.
+    twist_cmd = cfg.commands["twist"]
+    twist_cmd.rel_forward_envs = 0.4
+    twist_cmd.resampling_time_range = (5.0, 10.0)
+    twist_cmd.rel_standing_envs = 0.05
+
     # Zabezpieczenie przed NaN (patrz wariant flat).
     cfg.observations["actor"].nan_policy = "sanitize"
     cfg.observations["critic"].nan_policy = "sanitize"
+
+    if terrain_as_image:
+        # Zdejmij płaski height_scan z actora i critica (zostaje sama propriocepcja), zachowując oryginalną skalę (1/max_distance sensora).
+        scan_scale = cfg.observations["actor"].terms["height_scan"].scale
+        for group_name in ("actor", "critic"):
+            cfg.observations[group_name].terms.pop("height_scan", None)
+        # Dodaj skan jako osobną grupę o kształcie obrazu (B, 1, H, W).
+        cfg.observations["height_scan"] = ObservationGroupCfg(
+            terms={
+                "scan": ObservationTermCfg(
+                    func=height_scan_image,
+                    params={
+                        "sensor_name": "terrain_scan",
+                        "grid_hw": TERRAIN_SCAN_GRID_HW,
+                    },
+                    scale=scan_scale,
+                ),
+            },
+            concatenate_terms=True,
+            enable_corruption=False,
+            nan_policy="sanitize",
+        )
+        # Uwaga: samo wydzielenie grupy nie wystarcza — w rl_cfg trzeba wskazać
+        # `obs_groups`, np. {"actor": ["actor", "height_scan"],
+        # "critic": ["critic", "height_scan"]}, żeby runner podał ją modelowi.
 
     # --- Akcje: skala per-siłownik; kręgosłup ewentualnie poza polityką ---
     joint_pos_action = cfg.actions["joint_pos"]
@@ -110,7 +167,19 @@ def silver_badger_rough_env_cfg(
     cfg.rewards["upright"].params["terrain_sensor_names"] = ("terrain_scan",)
     cfg.rewards["body_ang_vel"].params["asset_cfg"].body_names = ("trunk",)
     cfg.rewards["body_ang_vel"].weight = 0.0
-    cfg.rewards["air_time"].weight = 0.0
+
+    # Przeciw „zamrożonemu staniu": na rough robot zbiegał do bezruchu, bo pion +
+    # poza + śledzenie ~zerowych obrotów dawały ~3/krok BEZ jazdy, a raczkujący
+    # chód (ryzyko upadku) mniej. Aby zapobiec:
+    #  - mocniej nagradzamy jazdę liniową,
+    #  - odbierz „darmowy" zysk z trzymania domyślnej pozy,
+    #  - ścij nagrodę za obrót (robot wyłudzał ją stojąc, matchując ~0 yaw),
+    #  - WŁĄCZ nagrodę za czas w powietrzu stóp = bezpośrednia zachęta do KROKU.
+    # (Wagi do dostrojenia — patrz notatka o zamrożonym staniu.)
+    cfg.rewards["track_linear_velocity"].weight = 4.0  # było 2.0
+    cfg.rewards["pose"].weight = 0.5  # było 1.0
+    cfg.rewards["track_angular_velocity"].weight = 1.0  # było 2.0
+    cfg.rewards["air_time"].weight = 0.5  # było 0.0 (nagroda za stawianie kroków)
     # Brak sensora root_angmom w naszym modelu — usuwamy człon (w go1 ma wagę 0).
     del cfg.rewards["angular_momentum"]
 
