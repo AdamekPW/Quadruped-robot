@@ -20,6 +20,7 @@ from robodog.assets.robots.silver_badger.constants import (
 )
 
 from .constants import FOOT_SITES, FOOT_GEOMS, LEG_ACTUATOR_PATTERNS
+from .metrics import add_velocity_metrics
 
 def silver_badger_flat_env_cfg(
     play: bool = False,
@@ -89,6 +90,11 @@ def silver_badger_flat_env_cfg(
     # rozkładu akcji może stać się NaN i cały trening wywala się w torch.normal.
     cfg.observations["actor"].nan_policy = "sanitize"
     cfg.observations["critic"].nan_policy = "sanitize"
+
+    # --- Metryki diagnostyczne (nie wpływają na uczenie) ---
+    # Te same co w wariancie rough, żeby porównania flat/rough były w tych samych
+    # jednostkach. Loguje się jako `Episode_Metrics/*`.
+    add_velocity_metrics(cfg.metrics)
 
     # --- Akcje: skala per-siłownik; kręgosłup ewentualnie poza polityką ---
     joint_pos_action = cfg.actions["joint_pos"]

@@ -1,9 +1,6 @@
-"""Konfiguracja RL (PPO / rsl-rl) dla zadania velocity Silver Badgera.
+"""
+Konfiguracja RL (PPO / rsl-rl)
 
-Na razie kopia ustawień Go1 (sprawdzone hiperparametry baseline). Zmieniona
-tylko nazwa eksperymentu — logi lądują w logs/rsl_rl/silver_badger_velocity.
-Docelowo tu podmienimy runner na własną implementację PPO, jeśli promotor
-wskaże ją jako wymagany wkład (patrz notatki projektu).
 """
 
 from mjlab.rl import (
@@ -61,14 +58,7 @@ _CNN_CRITIC = "robodog.algorithms.networks.cnn.cnn_critic:CNN_critic"
 
 
 def silver_badger_cnn_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
-    """Wariant runnera z WŁASNYMI sieciami CNN (enkoder nad mapą terenu).
-
-    Te same hiperparametry PPO co baseline — podmieniamy tylko `class_name`
-    actora i critica na nasze klasy. `obs_groups` zostaje domyślne
-    (`actor→["actor"], critic→["critic"]`); grupę-obraz `height_scan` sieci
-    czytają wprost z obserwacji (MLPModel nie przyjmuje grup 2D). Wymaga zadania
-    zbudowanego z `terrain_as_image=True`.
-    """
+    """Wariant runnera z WŁASNYMI sieciami CNN (enkoder nad mapą terenu) """
     cfg = silver_badger_ppo_runner_cfg()
     cfg.actor.class_name = _CNN_ACTOR
     cfg.critic.class_name = _CNN_CRITIC
