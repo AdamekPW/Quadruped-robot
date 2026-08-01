@@ -1,6 +1,9 @@
 # --- Artykuły / materiały źródłowe ---
 articles/
 
+# --- Notatki własne ---
+docs/
+
 # --- Środowisko Pythona ---
 # Środowiska Condy trzymamy poza repo (~/miniforge3/envs/robodog), ale gdyby
 # ktoś utworzył je lokalnie przez `conda env create -p ./envs`, ma być ignorowane.

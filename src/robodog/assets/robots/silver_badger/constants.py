@@ -1,13 +1,6 @@
-"""Stałe i konfiguracja encji robota Silver Badger dla mjlab.
+"""
+Stałe i konfiguracja encji robota Silver Badger dla mjlab.
 
-Odpowiednik `go1_constants.py` z mjlab, ale dla Silver Badgera (MAB Robotics):
-czworonóg z DODATKOWYM aktywnym stawem kręgosłupa (`spine_joint`, 1-DOF w
-płaszczyźnie strzałkowej) — łącznie 13 siłowników (kręgosłup + 12 nóg).
-
-Wartości siłowników (sztywność kp=20, tłumienie kv=0.5, limity siły: kręgosłup
-±48 N·m, nogi ±16 N·m) i poza nominalna pochodzą z oryginalnego modelu MJCF
-(repo one_policy_to_run_them_all — patrz README obok). Kolizje: tylko stopy,
-bo w oryginale reszta geometrii miała contype=0 (kontakt szedł jawnymi parami).
 """
 
 from pathlib import Path
@@ -29,8 +22,6 @@ def get_spec() -> mujoco.MjSpec:
 
 
 
-# Siłowniki (sterowanie pozycyjne PD).
-# Sztywność i tłumienie z oryginalnego <position kp="20" kv="0.5">.
 STIFFNESS = 20.0 # jak mocno silnik "ciągnie" do zadanego kąta (jak sztywność sprężyny)
 DAMPING = 0.5 # jak mocno hamuje ruch (aby staw nie oscylował)
 ARMATURE = 0.013122 # bezwładność wirnika "odbita" przez przekładnie
@@ -39,22 +30,21 @@ SPINE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=("spine_joint",),
     stiffness=STIFFNESS,
     damping=DAMPING,
-    effort_limit=48.0,  # forcerange kręgosłupa w oryginale
+    effort_limit=48.0,
     armature=ARMATURE,
 )
+
 LEG_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"),
     stiffness=STIFFNESS,
     damping=DAMPING,
-    effort_limit=16.0,  # forcerange nóg w oryginale
+    effort_limit=16.0,
     armature=ARMATURE,
 )
 
-# Poza startowa na początku każdego epizodu i punkt odniesienia dla akcji.
-# qpos bazy: z=0.316; stawy per-noga (znaki różne z powodu lustrzanej geometrii).
 INIT_STATE = EntityCfg.InitialStateCfg(
     pos=(0.0, 0.0, 0.316), # pozycja tułowia w metrach (x, y, h), chcemy aby stał na nogach
-    joint_pos={ # kąt każdego stawu w radianiach (geometria lustrzana dlatego znaki)
+    joint_pos={
         "spine_joint": 0.0,
         "RL_hip_joint": -0.1, "RL_thigh_joint": -0.8, "RL_calf_joint": 1.5,
         "RR_hip_joint": 0.1, "RR_thigh_joint": 0.8, "RR_calf_joint": -1.5,
@@ -65,11 +55,12 @@ INIT_STATE = EntityCfg.InitialStateCfg(
 )
 
 
-# Kolizje - tylko stopy (geomy RL_foot, RR_foot, FR_foot, FL_foot)
+_FEET_REGEX = "^[FR][LR]_foot$"
+
 FEET_ONLY_COLLISION = CollisionCfg(
-    geom_names_expr=("^[FR][LR]_foot$",),
-    contype=0, # maski bitowe kolizji
-    conaffinity=1, # maski bitowe kolizji
+    geom_names_expr=(_FEET_REGEX,),
+    contype=0,
+    conaffinity=1,
     condim=6, # ile "kierunków" tarcia model liczy
     priority=1,
     friction=(1.1, 5e-3, 1e-4), # współczynniki tarcia (ślizgowe, obrotowe, wałkowe)
@@ -77,28 +68,45 @@ FEET_ONLY_COLLISION = CollisionCfg(
     disable_other_geoms=True, # wyłączamy kolizję całej reszty robota
 )
 
-# Złożenie konfiguracji siłowników
+_BODY_REGEX = (
+    "^trunk_collision$",
+    "^rear_collision$",
+)
+
+FULL_COLLISION = CollisionCfg(
+    geom_names_expr=(_FEET_REGEX, *_BODY_REGEX),
+    contype=0,
+    conaffinity=1,
+    condim={_FEET_REGEX: 6, ".*": 1},
+    priority={_FEET_REGEX: 1},
+    friction={_FEET_REGEX: (1.1, 5e-3, 1e-4)},
+    solimp={_FEET_REGEX: (0.015, 1.0, 0.02)},
+    solref=(0.01, 1),
+    disable_other_geoms=True,
+)
+
 SILVER_BADGER_ARTICULATION = EntityArticulationInfoCfg(
     actuators=(SPINE_ACTUATOR_CFG, LEG_ACTUATOR_CFG),
     soft_joint_pos_limit_factor=0.9, # miękki limit zakresu stawów, polityka jest zniechęcana do wchodzenia w ostatnie 10% zakresu
 )
 
-# Złożenie całej konfiguracji robota
-def get_silver_badger_robot_cfg() -> EntityCfg:
+def get_silver_badger_robot_cfg(full_collision: bool = False) -> EntityCfg:
     """Zwraca świeżą konfigurację encji Silver Badgera.
 
-    Nowa instancja przy każdym wywołaniu — żeby współdzielenie configu w wielu
-    miejscach nie prowadziło do mutacji (tak samo jak w go1_constants).
+    Nowa instancja przy każdym wywołaniu - żeby współdzielenie configu w wielu miejscach nie prowadziło do konfliktów
+
+    Args:
+        full_collision: gdy False (domyślnie) kolizje mają tylko stopy - lekkie, pod teren płaski. Gdy True włącza
+        kolizje całego korpusu (`FULL_COLLISION`) - tułów/kręgosłup/uda/golenie zderzają się z terenem zamiast przez niego przenikać. 
     """
     return EntityCfg(
         init_state=INIT_STATE,
-        collisions=(FEET_ONLY_COLLISION,),
+        collisions=(FULL_COLLISION if full_collision else FEET_ONLY_COLLISION,),
         spec_fn=get_spec,
         articulation=SILVER_BADGER_ARTICULATION,
     )
 
 # Mapowanie wyniku sieci (z zakresu [-1, 1]) na sensowny kąt
-# Skala akcji per siłownik: 0.25 * limit_siły / sztywność
 SILVER_BADGER_ACTION_SCALE: dict[str, float] = {}
 for _a in SILVER_BADGER_ARTICULATION.actuators:
     assert isinstance(_a, BuiltinPositionActuatorCfg)

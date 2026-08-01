@@ -1,12 +1,39 @@
 """Obserwacje specyficzne dla RoboDoga.
 
-Na razie jedna funkcja: skan terenu jako obraz 2D pod sieć konwolucyjną.
+- `height_scan_image`: skan terenu jako obraz 2D (wejście UPRZYWILEJOWANE teachera).
+- `depth_image`: obraz głębi z kamery na tułowiu (wejście EKSTEROCEPTYWNE studenta —
+  jedyny „wzrok", jaki ma prawdziwy robot; teacher go nie używa).
 """
 
 import torch
 
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.envs import mdp as envs_mdp
+
+
+def depth_image(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    cutoff_distance: float,
+    min_depth: float = 0.05,
+) -> torch.Tensor:
+    """Obraz głębi z kamery jako `(B, 1, H, W)`, znormalizowany do [0, 1].
+
+    Args:
+        env: środowisko.
+        sensor_name: nazwa sensora kamery (np. "front_depth").
+        cutoff_distance: maksymalny zasięg [m]; dalej = 1.0 (nic nie widać).
+        min_depth: minimalna głębia [m] (przycięcie bliskich/zerowych trafień).
+
+    Returns:
+        Tensor `(B, 1, H, W)` w [0, 1] — gotowy pod Conv2d enkodera studenta.
+    """
+    sensor = env.scene[sensor_name]
+    depth = sensor.data.depth  # (B, H, W, 1)
+    assert depth is not None, f"Kamera {sensor_name!r} nie zwraca głębi (data.depth=None)."
+    depth = depth.permute(0, 3, 1, 2)  # (B, 1, H, W)
+    depth = torch.clamp(depth, min=min_depth, max=cutoff_distance)
+    return torch.clamp(depth / cutoff_distance, 0.0, 1.0)
 
 
 def height_scan_image(

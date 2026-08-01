@@ -1,10 +1,14 @@
+from copy import deepcopy
+
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import TerminationTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjlab.tasks.velocity import mdp
 from mjlab.sensor import (
+    CameraSensorCfg,
     ContactMatch,
     ContactSensorCfg,
     ObjRef,
@@ -20,18 +24,24 @@ from robodog.assets.robots.silver_badger.constants import (
 )
 
 from .constants import (
+    DEPTH_CAMERA_HW,
+    DEPTH_CAMERA_NAME,
+    DEPTH_CAMERA_POS,
+    DEPTH_CAMERA_QUAT,
+    DEPTH_CUTOFF,
     FOOT_SITES,
     FOOT_GEOMS,
     LEG_ACTUATOR_PATTERNS,
     TERRAIN_SCAN_GRID_HW,
 )
-from .observations import height_scan_image
+from .observations import depth_image, height_scan_image
 
 
 def silver_badger_rough_env_cfg(
     play: bool = False,
     lock_spine: bool = True,
     terrain_as_image: bool = False,
+    with_depth: bool = False,
 ) -> ManagerBasedRlEnvCfg:
     """Zadanie velocity Silver Badger na terenie NIEPŁASKIM (rough + curriculum).
 
@@ -53,13 +63,26 @@ def silver_badger_rough_env_cfg(
             skan terenu jest WYDZIELONY do osobnej grupy obserwacji `height_scan`
             o kształcie obrazu `(B, 1, H, W)` — pod własną sieć konwolucyjną.
             Wymaga wtedy ustawienia `obs_groups` w rl_cfg, żeby runner podał tę grupę modelowi.
+        with_depth: gdy True dokłada kamerę głębi na tułowiu i grupę obserwacji
+            `depth` o kształcie `(B, 1, H, W)` — wejście EKSTEROCEPTYWNE STUDENTA
+            (odpowiednik RealSense'a). Domyślnie False (teacher głębi nie używa).
+            W fazie distylacji ustawiamy JEDNOCZEŚNIE `terrain_as_image=True`
+            (height_scan dla teachera) i `with_depth=True` (depth dla studenta) —
+            środowisko wystawia oba, a każdy model czyta swoją grupę.
+            UWAGA: render kamery jest kosztowny (VRAM/czas) → na distylację mniej env.
     """
     cfg = make_velocity_env_cfg()
 
-    cfg.scene.num_envs = 4096
+    # 2048 (nie 4096): kolizje tułowia/kręgosłupa + heightfield mocno podnoszą
+    # zużycie VRAM (bufor solvera więzów ~ num_envs × njmax). Zweryfikowane realnym
+    # treningiem PPO+CNN: 2048 → szczyt ~13.2 GB na 16 GB (mieści się); 2560 = OOM.
+    cfg.scene.num_envs = 2048
 
     # --- Robot ---
-    cfg.scene.entities = {"robot": get_silver_badger_robot_cfg()}
+    # Na terenie nierównym włączamy PEŁNE kolizje korpusu (tułów/kręgosłup/uda/
+    # golenie), nie tylko stopy. Przy samych stopach korpus PRZENIKAŁ przez wysokie
+    # przeszkody (fizyka nieuczciwa, sufit curriculum ~poziom 4). Patrz FULL_COLLISION.
+    cfg.scene.entities = {"robot": get_silver_badger_robot_cfg(full_collision=True)}
 
     # --- Dostrojenie symulacji pod kontakty na terenie nierównym (jak go1 rough) ---
     # Więcej iteracji CCD i większy budżet dopasowań kontaktu, bo heightfield/bloki
@@ -68,6 +91,14 @@ def silver_badger_rough_env_cfg(
     cfg.sim.mujoco.impratio = 10
     cfg.sim.mujoco.cone = "elliptic"
     cfg.sim.contact_sensor_maxmatch = 500
+    
+    # Kolizje tułowia/kręgosłupa = więcej kontaktów/więzów na świat niż przy samych
+    # stopach → heurystyka mjlab nie starcza (nconmax overflow). Podnosimy ręcznie.
+    # UWAGA: solver więzów mujoco_warp alokuje bufor rosnący jak num_envs × njmax,
+    # więc njmax trzymamy CIASNO (próg dla tułów+rear to ~238 przy 256 env; margines
+    # na cięższe światy). Przy zwiększaniu num_envs pilnuj VRAM (ten bufor dominuje).
+    cfg.sim.nconmax = 80
+    cfg.sim.njmax = 260
 
     # --- Sensory: skan terenu (zostaje!) podpięty pod tułów ---
     for sensor in cfg.scene.sensors or ():
@@ -92,9 +123,25 @@ def silver_badger_rough_env_cfg(
         num_slots=1,
         track_air_time=True,
     )
-    cfg.scene.sensors = (cfg.scene.sensors or ()) + (feet_ground_cfg,)
-    # Uwaga: nasz model ma kolizje TYLKO w stopach (reszta contype=0), więc nie
-    # dodajemy sensorów kolizji ud/goleni/tułowia ani kar za nie (jak w go1).
+    # Sensor kontaktu TUŁÓW/KRĘGOSŁUP–TEREN (dostępny dzięki FULL_COLLISION).
+    # Napędza terminację `trunk_contact`. `history_length` > 0 → funkcja terminacji
+    # patrzy na historię siły z progiem, nie tylko na chwilowy `found` (patrz
+    # illegal_contact w mjlab). Ud/goleni NIE monitorujemy — nie mają kolizji.
+    trunk_ground_cfg = ContactSensorCfg(
+        name="trunk_ground_touch",
+        primary=ContactMatch(
+            mode="geom", pattern=("trunk_collision", "rear_collision"), entity="robot"
+        ),
+        secondary=ContactMatch(mode="body", pattern="terrain"),
+        fields=("found", "force"),
+        reduce="none",
+        num_slots=1,
+        history_length=4,
+    )
+    cfg.scene.sensors = (cfg.scene.sensors or ()) + (
+        feet_ground_cfg,
+        trunk_ground_cfg,
+    )
 
     # --- Curriculum terenu włączony ---
     if (
@@ -151,6 +198,53 @@ def silver_badger_rough_env_cfg(
         # `obs_groups`, np. {"actor": ["actor", "height_scan"],
         # "critic": ["critic", "height_scan"]}, żeby runner podał ją modelowi.
 
+    if with_depth:
+        # Kamera głębi na tułowiu + grupa obserwacji `depth` (B, 1, H, W) — wejście
+        # eksteroceptywne STUDENTA (odpowiednik RealSense'a). Nowa kamera tworzona
+        # w miejscu (parent_body="robot/trunk"), więc rozdzielczość jest spójna.
+        depth_cam = CameraSensorCfg(
+            name=DEPTH_CAMERA_NAME,
+            parent_body="robot/trunk",
+            pos=DEPTH_CAMERA_POS,
+            quat=DEPTH_CAMERA_QUAT,
+            width=DEPTH_CAMERA_HW[1],
+            height=DEPTH_CAMERA_HW[0],
+            data_types=("depth",),
+        )
+        cfg.scene.sensors = (cfg.scene.sensors or ()) + (depth_cam,)
+        cfg.observations["depth"] = ObservationGroupCfg(
+            terms={
+                "depth": ObservationTermCfg(
+                    func=depth_image,
+                    params={
+                        "sensor_name": DEPTH_CAMERA_NAME,
+                        "cutoff_distance": DEPTH_CUTOFF,
+                    },
+                ),
+            },
+            concatenate_terms=True,
+            enable_corruption=False,
+            nan_policy="sanitize",
+        )
+        # Propriocepcja STUDENTA = grupa `actor` MINUS `base_lin_vel`. Prędkości
+        # liniowej bazy realny robot nie zmierzy wprost (estymuje ją z dryfem), więc
+        # to wielkość UPRZYWILEJOWANA — zostaje teacherowi (grupa `actor`), a student
+        # jej nie dostaje. To, co zostaje, to dokładnie lista pokładowa: prędkości
+        # kątowe, grawitacja (IMU), pozycje/prędkości stawów, ostatnia akcja, komendy.
+        student_terms = {
+            name: deepcopy(term)
+            for name, term in cfg.observations["actor"].terms.items()
+            if name != "base_lin_vel"
+        }
+        cfg.observations["student_proprio"] = ObservationGroupCfg(
+            terms=student_terms,
+            concatenate_terms=True,
+            enable_corruption=cfg.observations["actor"].enable_corruption,
+            nan_policy="sanitize",
+        )
+        # W rl_cfg distylacji: student czyta `student_proprio` (+ `depth`),
+        # teacher czyta `actor` (+ `height_scan`).
+
     # --- Akcje: skala per-siłownik; kręgosłup ewentualnie poza polityką ---
     joint_pos_action = cfg.actions["joint_pos"]
     assert isinstance(joint_pos_action, JointPositionActionCfg)
@@ -182,6 +276,10 @@ def silver_badger_rough_env_cfg(
     cfg.rewards["air_time"].weight = 0.5  # było 0.0 (nagroda za stawianie kroków)
     # Brak sensora root_angmom w naszym modelu — usuwamy człon (w go1 ma wagę 0).
     del cfg.rewards["angular_momentum"]
+
+    # Kontakt korpusu z terenem obsługuje TERMINACJA `trunk_contact` (niżej), nie
+    # kara — leżenie na brzuchu to jednoznaczna porażka, nie coś do „delikatnego
+    # zniechęcania". Ud/goleni nie karzemy (nie mają kolizji — patrz FULL_COLLISION).
 
     for reward_name in ("foot_clearance", "foot_slip"):
         cfg.rewards[reward_name].params["asset_cfg"].site_names = FOOT_SITES
@@ -219,6 +317,13 @@ def silver_badger_rough_env_cfg(
     # sygnałem upadku jest orientacja tułowia — zostawiamy „fell_over" z bazy
     # (70°). `out_of_terrain_bounds` zostaje (napędza awans w curriculum terenu).
     cfg.terminations["nan"] = TerminationTermCfg(func=envs_mdp.nan_detection)
+    # Kontakt TUŁOWIA/KRĘGOSŁUPA z ziemią = robot leży na brzuchu (jednoznaczna
+    # porażka; nie koliduje ze wspinaniem — na brzuchu się nie wspina). Zostaje też
+    # `fell_over` (70°) z bazy jako drugi, niezależny sygnał upadku.
+    cfg.terminations["trunk_contact"] = TerminationTermCfg(
+        func=mdp.illegal_contact,
+        params={"sensor_name": trunk_ground_cfg.name},
+    )
 
     # --- Tryb play (podgląd nauczonej polityki) ---
     if play:
