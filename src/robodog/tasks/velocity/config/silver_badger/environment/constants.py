@@ -31,3 +31,6 @@ DEPTH_CAMERA_POS = (0.28, 0.0, 0.0)
 
 # (w, x, y, z): patrz do przodu (+x tułowia) z pochyleniem 35 stopni w dół.
 DEPTH_CAMERA_QUAT = (0.6272, 0.3265, -0.3265, -0.6272)
+
+# Pionowe pole widzenia [stopnie]
+DEPTH_CAMERA_FOVY = 45.0

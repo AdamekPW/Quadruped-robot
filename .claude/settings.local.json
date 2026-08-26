@@ -11,7 +11,11 @@
       "Bash(python -c \"import fitz; print\\('pymupdf ok'\\)\")",
       "Bash(python -c ' *)",
       "Bash(cd \"C:/Users/szulc/OneDrive/Pulpit/RoboDog\" && rm -f scratch_pdf.txt)",
-      "mcp__visualize__read_me"
+      "mcp__visualize__read_me",
+      "Bash(curl -s \"https://api.github.com/repos/Gwidi/RL-X/contents/rl_x/environments/custom_mujoco/robot_locomotion/mjx/domain_randomization?ref=mab_sbg\")",
+      "Bash(python3 -c \"import sys,json; [print\\(x['type'], x['size'], x['path']\\) for x in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"https://api.github.com/repos/Gwidi/RL-X/git/trees/mab_sbg?recursive=1\")",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
