@@ -1,9 +1,12 @@
 from copy import deepcopy
+from dataclasses import fields
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
+from mjlab.envs.mdp import dr
 from mjlab.envs.mdp.actions import JointPositionActionCfg
-from mjlab.managers import TerminationTermCfg
+from mjlab.managers import SceneEntityCfg, TerminationTermCfg
+from mjlab.managers.curriculum_manager import CurriculumTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.tasks.velocity import mdp
@@ -17,13 +20,16 @@ from mjlab.sensor import (
     TerrainHeightSensorCfg,
 )
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
+from mjlab.utils.spec_config import CameraCfg
 
 from robodog.assets.robots.silver_badger.constants import (
     SILVER_BADGER_ACTION_SCALE,
     get_silver_badger_robot_cfg,
 )
+from robodog.tasks.velocity import mdp as robodog_mdp
 
 from .constants import (
+    DEPTH_CAMERA_FOVY,
     DEPTH_CAMERA_HW,
     DEPTH_CAMERA_NAME,
     DEPTH_CAMERA_POS,
@@ -43,6 +49,7 @@ def silver_badger_rough_env_cfg(
     lock_spine: bool = True,
     terrain_as_image: bool = False,
     with_depth: bool = False,
+    randomize_inertia_each_episode: bool = True,
 ) -> ManagerBasedRlEnvCfg:
     """ Zadanie velocity Silver Badger na terenie NIEPŁASKIM (rough + curriculum) """
 
@@ -128,6 +135,7 @@ def silver_badger_rough_env_cfg(
         scan_scale = cfg.observations["actor"].terms["height_scan"].scale
         for group_name in ("actor", "critic"):
             cfg.observations[group_name].terms.pop("height_scan", None)
+            
         # Dodaj skan jako osobną grupę o kształcie obrazu (B, 1, H, W).
         cfg.observations["height_scan"] = ObservationGroupCfg(
             terms={
@@ -146,11 +154,19 @@ def silver_badger_rough_env_cfg(
         )
 
     if with_depth:
+        robot_cfg = cfg.scene.entities["robot"]
+        robot_cfg.cameras = robot_cfg.cameras + (
+            CameraCfg(
+                name=DEPTH_CAMERA_NAME,
+                body="trunk",
+                pos=DEPTH_CAMERA_POS,
+                quat=DEPTH_CAMERA_QUAT,
+                fovy=DEPTH_CAMERA_FOVY,
+            ),
+        )
         depth_cam = CameraSensorCfg(
             name=DEPTH_CAMERA_NAME,
-            parent_body="robot/trunk",
-            pos=DEPTH_CAMERA_POS,
-            quat=DEPTH_CAMERA_QUAT,
+            camera_name=f"robot/{DEPTH_CAMERA_NAME}",
             width=DEPTH_CAMERA_HW[1],
             height=DEPTH_CAMERA_HW[0],
             data_types=("depth",),
@@ -183,8 +199,15 @@ def silver_badger_rough_env_cfg(
         )
 
     # --- Akcje: skala per-siłownik; kręgosłup ewentualnie poza polityką ---
-    joint_pos_action = cfg.actions["joint_pos"]
-    assert isinstance(joint_pos_action, JointPositionActionCfg)
+    base_action = cfg.actions["joint_pos"]
+    assert isinstance(base_action, JointPositionActionCfg)
+    joint_pos_action = robodog_mdp.DelayedJointPositionActionCfg(
+        **{f.name: getattr(base_action, f.name) for f in fields(base_action)},
+        max_delay_steps=1,
+        jitter_probability=0.05,
+    )
+    cfg.actions["joint_pos"] = joint_pos_action
+
     action_scale = dict(SILVER_BADGER_ACTION_SCALE)
     if lock_spine:
         # Polityka nie dostaje kanału na kręgosłup: sterujemy tylko nogami.
@@ -208,8 +231,6 @@ def silver_badger_rough_env_cfg(
     for reward_name in ("foot_clearance", "foot_slip"):
         cfg.rewards[reward_name].params["asset_cfg"].site_names = FOOT_SITES
 
-    # Docelowe odchylenia pozy (stój/chód/bieg) — kręgosłup + nogi. Gdy kręgosłup
-    # jest usztywniony, jego człon i tak jest stały (trzyma się 0), więc nie szkodzi.
     cfg.rewards["pose"].params["std_standing"] = {
         r"spine_joint": 0.05,
         r".*_(hip|thigh)_joint": 0.05,
@@ -227,9 +248,114 @@ def silver_badger_rough_env_cfg(
     }
 
     # --- Zdarzenia (domain randomization) ---
-    cfg.events["base_com"].params["asset_cfg"].body_names = ("trunk",)
-    # DR tarcia stóp (condim=6) wymaga wariantu per-oś jak w go1 — na razie pomijamy.
-    cfg.events.pop("foot_friction", None)
+    inertia_dr_mode = "reset" if randomize_inertia_each_episode else "startup"
+
+    # `base_com` usunięty: `pseudo_inertia` nadpisuje `body_ipos` (liczy je od wartości
+    # domyślnych) i odpala się po nim, więc kasował jego efekt. COM przesuwa teraz sam
+    # `pseudo_inertia` przez `t1..t3_range`.
+    cfg.events.pop("base_com")
+    cfg.events["encoder_bias"].mode = "reset"
+    cfg.events["foot_friction"].mode = "interval"
+    cfg.events["foot_friction"].interval_range_s = (4.0, 10.0)
+    cfg.events["foot_friction"].params["asset_cfg"].geom_names = FOOT_GEOMS
+    cfg.events["pd_gains"] = EventTermCfg(
+        mode="reset",
+        func=dr.pd_gains,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "kp_range": (0.8, 1.2),
+            "kd_range": (0.8, 1.2),
+            "operation": "scale",
+        },
+    )
+    cfg.events["pseudo_inertia"] = EventTermCfg(
+        mode=inertia_dr_mode,
+        func=dr.pseudo_inertia,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
+            "alpha_range": (-0.08, 0.08),
+            # Przesunięcie COM tułowia po `base_com`. `t1..t3` to parametry perturbacji
+            # pseudo-inercji, nie metry wprost, ale skala wychodzi 1:1 (0.025 -> 0.025 m).
+            "t1_range": (-0.025, 0.025),
+            "t2_range": (-0.025, 0.025),
+            "t3_range": (-0.03, 0.03),
+        }
+    )
+    cfg.events["joint_friction"] = EventTermCfg(
+        mode="interval",
+        interval_range_s=(4.0, 10.0),
+        func=dr.joint_friction,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "operation": "scale",
+            "ranges": (0.7, 1.3)
+        }
+    )
+    cfg.events["joint_armature"] = EventTermCfg(
+        mode=inertia_dr_mode,
+        func=dr.joint_armature,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "operation": "scale",
+            "ranges": (0.7, 1.3)
+        }
+    )
+    # Przechył grawitacji: darmowy odpowiednik pochyłości terenu / bocznego wiatru
+    cfg.events["gravity"] = EventTermCfg(
+        mode="reset",
+        func=robodog_mdp.gravity,
+        params={
+            "xy_range": (-0.5, 0.5),
+            "z_scale_range": (0.9, 1.1),
+        },
+    )
+    if with_depth:
+        cfg.events["cam_pos"] = EventTermCfg(
+            mode="startup",
+            func=dr.cam_pos,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    "robot", camera_names=(DEPTH_CAMERA_NAME,)
+                ),
+                "operation": "add",  # przesunięcie w metrach: +-5 mm
+                "ranges": (-0.005, 0.005),
+            },
+        )
+        cfg.events["cam_quat"] = EventTermCfg(
+            mode="startup",
+            func=dr.cam_quat,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    "robot", camera_names=(DEPTH_CAMERA_NAME,)
+                ),
+                "roll_range": (-0.02, 0.02),
+                "pitch_range": (-0.02, 0.02),
+                "yaw_range": (-0.02, 0.02),
+            },
+        )
+
+
+    # --- Curriculum: siła domain randomization rośnie 0 -> 100% ---
+    curriculum_events = [
+        "encoder_bias",
+        "foot_friction",
+        "pd_gains",
+        "joint_friction",
+        "gravity",
+        "push_robot",
+    ]
+    if randomize_inertia_each_episode:
+        curriculum_events += ["pseudo_inertia", "joint_armature"]
+
+    cfg.curriculum["domain_randomization"] = CurriculumTermCfg(
+        func=robodog_mdp.dr_curriculum,
+        params={
+            "event_names": tuple(curriculum_events),
+            "start_step": 500 * 24,
+            "end_step": 4_000 * 24,
+            "action_name": "joint_pos",
+        },
+    )
 
     # --- Podgląd ---
     cfg.viewer.body_name = "trunk"
