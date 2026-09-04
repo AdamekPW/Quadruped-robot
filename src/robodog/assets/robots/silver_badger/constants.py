@@ -16,9 +16,32 @@ SILVER_BADGER_XML: Path = Path(__file__).parent / "xmls" / "silver_badger.xml"
 assert SILVER_BADGER_XML.exists(), f"Brak pliku modelu: {SILVER_BADGER_XML}"
 
 
+# --- Punkt startowy skanu terenu ---
+# `terrain_scan` rzuca promienie PIONOWO w dół, a mjlab startuje je zawsze z
+# fizycznej pozycji ramki — nie ma w configu żadnego offsetu pionowego. Startując
+# z tułowia (0.316 m nad gruntem), promienie sięgające 0.8 m do przodu wchodzą POD
+# powierzchnię zbocza stromszego niż ~22°: trafiają w podstawę heightfieldu i
+# raportują ścianę jako płaską podłogę pół metra niżej. Podniesiony site przesuwa
+# ten próg poza 45° (na zboczu 45° z tułowiem trzymanym poziomo zapas to +0.34 m).
+TERRAIN_SCAN_SITE_NAME = "terrain_scan_origin"
+TERRAIN_SCAN_SITE_HEIGHT = 0.8
+
+
+def _add_terrain_scan_site(spec: mujoco.MjSpec) -> None:
+    """Dopina do tułowia site, z którego startuje skan terenu."""
+    spec.body("trunk").add_site(
+        name=TERRAIN_SCAN_SITE_NAME,
+        pos=(0.0, 0.0, TERRAIN_SCAN_SITE_HEIGHT),
+        size=(0.01, 0.01, 0.01),
+        group=5,  # grupa wizualizacyjna: nie koliduje i nie trafiają w nią promienie
+    )
+
+
 def get_spec() -> mujoco.MjSpec:
     """Wczytuje MjSpec z czystego (mjlab-owego) XML-a Silver Badgera."""
-    return mujoco.MjSpec.from_file(str(SILVER_BADGER_XML))
+    spec = mujoco.MjSpec.from_file(str(SILVER_BADGER_XML))
+    _add_terrain_scan_site(spec)
+    return spec
 
 
 

@@ -24,6 +24,8 @@ from mjlab.utils.spec_config import CameraCfg
 
 from robodog.assets.robots.silver_badger.constants import (
     SILVER_BADGER_ACTION_SCALE,
+    TERRAIN_SCAN_SITE_HEIGHT,
+    TERRAIN_SCAN_SITE_NAME,
     get_silver_badger_robot_cfg,
 )
 from robodog.tasks.velocity import mdp as robodog_mdp
@@ -38,6 +40,7 @@ from .constants import (
     FOOT_SITES,
     FOOT_GEOMS,
     LEG_ACTUATOR_PATTERNS,
+    PLAY_ROBOTS_PER_TERRAIN_CELL,
     TERRAIN_SCAN_GRID_HW,
 )
 from .metrics import add_velocity_metrics
@@ -69,12 +72,17 @@ def silver_badger_rough_env_cfg(
     cfg.sim.nconmax = 80
     cfg.sim.njmax = 260
 
-    # --- Sensory: skan terenu (zostaje!) podpięty pod tułów ---
+    # --- Sensory: skan terenu (zostaje!) podpięty pod podniesiony site ---
     for sensor in cfg.scene.sensors or ():
         if sensor.name == "terrain_scan":
             assert isinstance(sensor, RayCastSensorCfg)
             assert isinstance(sensor.frame, ObjRef)
-            sensor.frame.name = "trunk"
+            # NIE tułów: promienie lecą pionowo w dół z fizycznej pozycji ramki,
+            # więc startując z tułowia wchodzą pod powierzchnię zbocza stromszego
+            # niż ~22° i raportują ścianę jako płaską podłogę. Patrz komentarz
+            # przy TERRAIN_SCAN_SITE_HEIGHT.
+            sensor.frame.type = "site"
+            sensor.frame.name = TERRAIN_SCAN_SITE_NAME
         if sensor.name == "foot_height_scan":
             assert isinstance(sensor, TerrainHeightSensorCfg)
             sensor.frame = tuple(
@@ -130,6 +138,14 @@ def silver_badger_rough_env_cfg(
     cfg.observations["actor"].nan_policy = "sanitize"
     cfg.observations["critic"].nan_policy = "sanitize"
 
+    # Skan mierzy teraz wysokość od site'u, a nie od tułowia, więc każda wartość
+    # jest o TERRAIN_SCAN_SITE_HEIGHT większa. Odejmujemy to, żeby obserwacja
+    # została w dokładnie tej samej skali co wcześniej: na płaskim nadal ~0.32 m.
+    for group_name in ("actor", "critic"):
+        cfg.observations[group_name].terms["height_scan"].params["offset"] = (
+            TERRAIN_SCAN_SITE_HEIGHT
+        )
+
     if terrain_as_image:
         # Zdejmij płaski height_scan z actora i critica (zostaje sama propriocepcja), zachowując oryginalną skalę (1/max_distance sensora).
         scan_scale = cfg.observations["actor"].terms["height_scan"].scale
@@ -144,6 +160,7 @@ def silver_badger_rough_env_cfg(
                     params={
                         "sensor_name": "terrain_scan",
                         "grid_hw": TERRAIN_SCAN_GRID_HW,
+                        "offset": TERRAIN_SCAN_SITE_HEIGHT,
                     },
                     scale=scan_scale,
                 ),
@@ -372,23 +389,35 @@ def silver_badger_rough_env_cfg(
     # --- Tryb play (podgląd nauczonej polityki) ---
     if play:
         cfg.episode_length_s = int(1e9)
-        cfg.scene.num_envs = 50  # podgląd: kilka robotów wystarczy
         cfg.observations["actor"].enable_corruption = False
         cfg.events.pop("push_robot", None)
         cfg.terminations.pop("out_of_terrain_bounds", None)
         cfg.curriculum = {}
-        cfg.events["randomize_terrain"] = EventTermCfg(
-            func=envs_mdp.randomize_terrain,
-            mode="reset",
-            params={},
+
+        assert cfg.scene.terrain is not None
+        generator = cfg.scene.terrain.terrain_generator
+        assert generator is not None
+        generator.curriculum = True
+        generator.num_rows = 10
+        generator.border_width = 20.0
+        # `num_cols` celowo nie ustawiamy: przy `curriculum=True` generator i tak
+        # je ignoruje i robi jedną kolumnę na typ terenu. Wiersz = poziom trudności,
+        # kolumna = rodzaj przeszkody.
+        num_cols = len(generator.sub_terrains)
+
+        # Równa obsada każdego pola siatki zamiast losowego rozrzutu: cały
+        # curriculum widać naraz. Liczba środowisk MUSI wyjść z siatki, inaczej
+        # `assign_terrain_grid` zgłosi błąd.
+        cfg.scene.num_envs = robodog_mdp.required_num_envs(
+            generator.num_rows, num_cols, PLAY_ROBOTS_PER_TERRAIN_CELL
         )
-        if (
-            cfg.scene.terrain is not None
-            and cfg.scene.terrain.terrain_generator is not None
-        ):
-            cfg.scene.terrain.terrain_generator.curriculum = False
-            cfg.scene.terrain.terrain_generator.num_cols = 5
-            cfg.scene.terrain.terrain_generator.num_rows = 5
-            cfg.scene.terrain.terrain_generator.border_width = 10.0
+        # Tryb `startup`, nie `reset`: odpala się raz, PRZED pierwszym resetem, więc
+        # `reset_base` od razu widzi właściwe `env_origins`. Zdarzenie `reset`
+        # dopisane na końcu słownika zadziałałoby dopiero na następny epizod.
+        cfg.events["assign_terrain_grid"] = EventTermCfg(
+            mode="startup",
+            func=robodog_mdp.assign_terrain_grid,
+            params={"robots_per_cell": PLAY_ROBOTS_PER_TERRAIN_CELL},
+        )
 
     return cfg

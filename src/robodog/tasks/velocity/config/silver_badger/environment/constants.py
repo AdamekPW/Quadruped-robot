@@ -34,3 +34,8 @@ DEPTH_CAMERA_QUAT = (0.6272, 0.3265, -0.3265, -0.6272)
 
 # Pionowe pole widzenia [stopnie]
 DEPTH_CAMERA_FOVY = 45.0
+
+# --- Podgląd (tryb play) ---
+# Ilu robotów sadzamy na każdym polu siatki terenu. Liczba środowisk wynika z
+# tego wprost: robots_per_cell * num_rows * liczba typów terenu.
+PLAY_ROBOTS_PER_TERRAIN_CELL = 3
