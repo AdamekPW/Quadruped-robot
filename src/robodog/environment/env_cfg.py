@@ -28,7 +28,7 @@ from robodog.assets.robots.silver_badger.constants import (
     TERRAIN_SCAN_SITE_NAME,
     get_silver_badger_robot_cfg,
 )
-from robodog.tasks.velocity import mdp as robodog_mdp
+from robodog.environment import mdp as robodog_mdp
 
 from .constants import (
     DEPTH_CAMERA_FOVY,

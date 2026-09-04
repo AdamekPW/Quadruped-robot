@@ -33,7 +33,7 @@ def _build_rough_env(**cfg_overrides):
     """Buduje środowisko rough Silver Badgera z małą liczbą env do inspekcji."""
     import robodog  # noqa: F401 — import rejestruje zadania i moduły configu
     from mjlab.envs import ManagerBasedRlEnv
-    from robodog.tasks.velocity.config.silver_badger.environment.rough_env_cfg import (
+    from robodog.environment.env_cfg import (
         silver_badger_rough_env_cfg,
     )
 
@@ -72,7 +72,7 @@ def test_rough_observation_dims_flat():
 def test_rough_observation_dims_terrain_as_image():
     """Wariant CNN: height_scan wydzielony jako obraz 2D (B, 1, H, W)."""
     _require_gpu()
-    from robodog.tasks.velocity.config.silver_badger.environment.constants import (
+    from robodog.environment.constants import (
         TERRAIN_SCAN_GRID_HW,
     )
 
@@ -98,7 +98,7 @@ def test_rough_observation_dims_terrain_as_image():
 
 def test_terrain_grid_shape_matches_ray_count():
     """Stała TERRAIN_SCAN_GRID_HW musi zgadzać się z liczbą rzutów sensora."""
-    from robodog.tasks.velocity.config.silver_badger.environment.constants import (
+    from robodog.environment.constants import (
         TERRAIN_SCAN_GRID_HW,
     )
 
