@@ -66,7 +66,7 @@ class RslRlDistillationRunnerCfg(RslRlBaseRunnerCfg):
     
     teacher_checkpoint: str | None = None
 
-def silver_badger_distillation_runner_cfg() -> RslRlDistillationRunnerCfg:
+def distillation_runner_cfg() -> RslRlDistillationRunnerCfg:
     """Tworzy konfigurację distylacji Silver Badgera (teacher CNN → student depth)."""
     return RslRlDistillationRunnerCfg(
         obs_groups={"student": ("student_proprio",), "teacher": ("actor",)},

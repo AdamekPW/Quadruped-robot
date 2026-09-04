@@ -10,7 +10,7 @@ from mjlab.rl import (
 )
 
 
-def silver_badger_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+def ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     """Tworzy konfigurację runnera RL dla zadania velocity Silver Badgera."""
     return RslRlOnPolicyRunnerCfg(
         actor=RslRlModelCfg(
@@ -57,9 +57,9 @@ _CNN_ACTOR = "robodog.algorithms.networks.cnn.cnn_actor:CNN_actor"
 _CNN_CRITIC = "robodog.algorithms.networks.cnn.cnn_critic:CNN_critic"
 
 
-def silver_badger_cnn_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+def cnn_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     """Wariant runnera z WŁASNYMI sieciami CNN (enkoder nad mapą terenu) """
-    cfg = silver_badger_ppo_runner_cfg()
+    cfg = ppo_runner_cfg()
     cfg.actor.class_name = _CNN_ACTOR
     cfg.critic.class_name = _CNN_CRITIC
     return cfg

@@ -2,7 +2,7 @@
 
 Układ katalogu naśladuje `mjlab.tasks.velocity.mdp`, żeby import wyglądał znajomo:
 
-    from robodog.tasks.velocity import mdp as robodog_mdp
+    from robodog.environment import mdp as robodog_mdp
 """
 
 from .actions import DelayedJointPositionAction, DelayedJointPositionActionCfg

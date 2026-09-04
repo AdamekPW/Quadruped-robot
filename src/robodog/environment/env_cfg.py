@@ -47,12 +47,11 @@ from .metrics import add_velocity_metrics
 from .observations import depth_image, height_scan_image
 
 
-def silver_badger_rough_env_cfg(
+def env_cfg(
     play: bool = False,
     lock_spine: bool = True,
     terrain_as_image: bool = False,
     with_depth: bool = False,
-    randomize_inertia_each_episode: bool = True,
 ) -> ManagerBasedRlEnvCfg:
     """ Zadanie velocity Silver Badger na terenie NIEPŁASKIM (rough + curriculum) """
 
@@ -264,9 +263,6 @@ def silver_badger_rough_env_cfg(
         r".*_calf_joint": 0.6,
     }
 
-    # --- Zdarzenia (domain randomization) ---
-    inertia_dr_mode = "reset" if randomize_inertia_each_episode else "startup"
-
     # `base_com` usunięty: `pseudo_inertia` nadpisuje `body_ipos` (liczy je od wartości
     # domyślnych) i odpala się po nim, więc kasował jego efekt. COM przesuwa teraz sam
     # `pseudo_inertia` przez `t1..t3_range`.
@@ -286,7 +282,7 @@ def silver_badger_rough_env_cfg(
         },
     )
     cfg.events["pseudo_inertia"] = EventTermCfg(
-        mode=inertia_dr_mode,
+        mode="reset",
         func=dr.pseudo_inertia,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
@@ -309,7 +305,7 @@ def silver_badger_rough_env_cfg(
         }
     )
     cfg.events["joint_armature"] = EventTermCfg(
-        mode=inertia_dr_mode,
+        mode="reset",
         func=dr.joint_armature,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
@@ -360,9 +356,9 @@ def silver_badger_rough_env_cfg(
         "joint_friction",
         "gravity",
         "push_robot",
+        "pseudo_inertia",
+        "joint_armature",
     ]
-    if randomize_inertia_each_episode:
-        curriculum_events += ["pseudo_inertia", "joint_armature"]
 
     cfg.curriculum["domain_randomization"] = CurriculumTermCfg(
         func=robodog_mdp.dr_curriculum,

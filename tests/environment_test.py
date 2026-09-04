@@ -33,11 +33,9 @@ def _build_rough_env(**cfg_overrides):
     """Buduje środowisko rough Silver Badgera z małą liczbą env do inspekcji."""
     import robodog  # noqa: F401 — import rejestruje zadania i moduły configu
     from mjlab.envs import ManagerBasedRlEnv
-    from robodog.environment.env_cfg import (
-        silver_badger_rough_env_cfg,
-    )
+    from robodog.environment.env_cfg import env_cfg
 
-    cfg = silver_badger_rough_env_cfg(**cfg_overrides)
+    cfg = env_cfg(**cfg_overrides)
     cfg.scene.num_envs = _NUM_ENVS
     return ManagerBasedRlEnv(cfg=cfg, device="cuda")
 
