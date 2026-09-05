@@ -13,7 +13,7 @@ niż smoke testy z `environment_version_test.py` i wymagają GPU CUDA. Odpalaj
 
 import pytest
 
-# Oczekiwane wymiary (rough, Silver Badger). Zmiana modelu/sensorów je ruszy —
+# Oczekiwane wymiary (Silver Badger). Zmiana modelu/sensorów je ruszy —
 # i wtedy test ma o tym głośno powiedzieć.
 _EXPECTED_ACTOR_FLAT = 237  #  propriocepcja(50) + height_scan(187)
 _EXPECTED_CRITIC_FLAT = 261  # propriocepcja(50) + height_scan(187) + człony uprzywilejowane krytyka(24)
@@ -29,13 +29,10 @@ def _require_gpu():
         pytest.skip("brak GPU CUDA — środowisko mjlab nie zbuduje się na CPU")
 
 
-def _build_rough_env(**cfg_overrides):
-    """Buduje środowisko rough Silver Badgera z małą liczbą env do inspekcji."""
-    import robodog  # noqa: F401 — import rejestruje zadania i moduły configu
+def _build_env(cfg):
+    """Buduje środowisko z podanej konfiguracji, z małą liczbą env do inspekcji."""
     from mjlab.envs import ManagerBasedRlEnv
-    from robodog.environment.env_cfg import env_cfg
 
-    cfg = env_cfg(**cfg_overrides)
     cfg.scene.num_envs = _NUM_ENVS
     return ManagerBasedRlEnv(cfg=cfg, device="cuda")
 
@@ -52,10 +49,12 @@ def _print_observation_dims(env) -> None:
             print(f"      {name:22s} {dim}")
 
 
-def test_rough_observation_dims_flat():
-    """Baseline rough: obserwacje to płaskie wektory (actor 237, critic 261)."""
+def test_baseline_observation_dims_flat():
+    """Baseline MLP: obserwacje to płaskie wektory (actor 237, critic 261)."""
     _require_gpu()
-    env = _build_rough_env(terrain_as_image=False)
+    from robodog.environment.variants import baseline_cfg
+
+    env = _build_env(baseline_cfg())
     try:
         obs, _ = env.reset()
         _print_observation_dims(env)
@@ -67,14 +66,13 @@ def test_rough_observation_dims_flat():
         del env
 
 
-def test_rough_observation_dims_terrain_as_image():
+def test_cnn_observation_dims_terrain_as_image():
     """Wariant CNN: height_scan wydzielony jako obraz 2D (B, 1, H, W)."""
     _require_gpu()
-    from robodog.environment.constants import (
-        TERRAIN_SCAN_GRID_HW,
-    )
+    from robodog.environment.constants import TERRAIN_SCAN_GRID_HW
+    from robodog.environment.variants import cnn_cfg
 
-    env = _build_rough_env(terrain_as_image=True)
+    env = _build_env(cnn_cfg())
     try:
         obs, _ = env.reset()
         _print_observation_dims(env)

@@ -1,4 +1,3 @@
-from copy import deepcopy
 from dataclasses import fields
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -8,10 +7,8 @@ from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import SceneEntityCfg, TerminationTermCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
 from mjlab.managers.event_manager import EventTermCfg
-from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.tasks.velocity import mdp
 from mjlab.sensor import (
-    CameraSensorCfg,
     ContactMatch,
     ContactSensorCfg,
     ObjRef,
@@ -20,7 +17,6 @@ from mjlab.sensor import (
     TerrainHeightSensorCfg,
 )
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
-from mjlab.utils.spec_config import CameraCfg
 
 from robodog.assets.robots.silver_badger.constants import (
     SILVER_BADGER_ACTION_SCALE,
@@ -31,38 +27,25 @@ from robodog.assets.robots.silver_badger.constants import (
 from robodog.environment import mdp as robodog_mdp
 
 from .constants import (
-    DEPTH_CAMERA_FOVY,
-    DEPTH_CAMERA_HW,
-    DEPTH_CAMERA_NAME,
-    DEPTH_CAMERA_POS,
-    DEPTH_CAMERA_QUAT,
-    DEPTH_CUTOFF,
     FOOT_SITES,
     FOOT_GEOMS,
     LEG_ACTUATOR_PATTERNS,
-    PLAY_ROBOTS_PER_TERRAIN_CELL,
-    TERRAIN_SCAN_GRID_HW,
 )
 from .metrics import add_velocity_metrics
-from .observations import depth_image, height_scan_image
 
 
-def env_cfg(
-    play: bool = False,
-    lock_spine: bool = True,
-    terrain_as_image: bool = False,
-    with_depth: bool = False,
-) -> ManagerBasedRlEnvCfg:
-    """ Zadanie velocity Silver Badger na terenie NIEPŁASKIM (rough + curriculum) """
+def env_cfg(*, lock_spine: bool = True) -> ManagerBasedRlEnvCfg:
+    """Bazowe zadanie velocity Silver Badgera na terenie nierównym (+ curriculum).
+    Args:
+        lock_spine: gdy True kręgosłup jest usztywniony
+    """
 
     cfg = make_velocity_env_cfg()
 
     cfg.scene.num_envs = 2048
 
-    # --- Robot ---
     cfg.scene.entities = {"robot": get_silver_badger_robot_cfg(full_collision=True)}
 
-    # --- Dostrojenie symulacji pod kontakty na terenie nierównym (jak go1 rough) ---
     cfg.sim.mujoco.ccd_iterations = 500
     cfg.sim.mujoco.impratio = 10
     cfg.sim.mujoco.cone = "elliptic"
@@ -71,15 +54,13 @@ def env_cfg(
     cfg.sim.nconmax = 80
     cfg.sim.njmax = 260
 
-    # --- Sensory: skan terenu (zostaje!) podpięty pod podniesiony site ---
     for sensor in cfg.scene.sensors or ():
         if sensor.name == "terrain_scan":
             assert isinstance(sensor, RayCastSensorCfg)
             assert isinstance(sensor.frame, ObjRef)
             # NIE tułów: promienie lecą pionowo w dół z fizycznej pozycji ramki,
             # więc startując z tułowia wchodzą pod powierzchnię zbocza stromszego
-            # niż ~22° i raportują ścianę jako płaską podłogę. Patrz komentarz
-            # przy TERRAIN_SCAN_SITE_HEIGHT.
+            # niż ~22° i raportują ścianę jako płaską podłogę.
             sensor.frame.type = "site"
             sensor.frame.name = TERRAIN_SCAN_SITE_NAME
         if sensor.name == "foot_height_scan":
@@ -145,74 +126,6 @@ def env_cfg(
             TERRAIN_SCAN_SITE_HEIGHT
         )
 
-    if terrain_as_image:
-        # Zdejmij płaski height_scan z actora i critica (zostaje sama propriocepcja), zachowując oryginalną skalę (1/max_distance sensora).
-        scan_scale = cfg.observations["actor"].terms["height_scan"].scale
-        for group_name in ("actor", "critic"):
-            cfg.observations[group_name].terms.pop("height_scan", None)
-            
-        # Dodaj skan jako osobną grupę o kształcie obrazu (B, 1, H, W).
-        cfg.observations["height_scan"] = ObservationGroupCfg(
-            terms={
-                "scan": ObservationTermCfg(
-                    func=height_scan_image,
-                    params={
-                        "sensor_name": "terrain_scan",
-                        "grid_hw": TERRAIN_SCAN_GRID_HW,
-                        "offset": TERRAIN_SCAN_SITE_HEIGHT,
-                    },
-                    scale=scan_scale,
-                ),
-            },
-            concatenate_terms=True,
-            enable_corruption=False,
-            nan_policy="sanitize",
-        )
-
-    if with_depth:
-        robot_cfg = cfg.scene.entities["robot"]
-        robot_cfg.cameras = robot_cfg.cameras + (
-            CameraCfg(
-                name=DEPTH_CAMERA_NAME,
-                body="trunk",
-                pos=DEPTH_CAMERA_POS,
-                quat=DEPTH_CAMERA_QUAT,
-                fovy=DEPTH_CAMERA_FOVY,
-            ),
-        )
-        depth_cam = CameraSensorCfg(
-            name=DEPTH_CAMERA_NAME,
-            camera_name=f"robot/{DEPTH_CAMERA_NAME}",
-            width=DEPTH_CAMERA_HW[1],
-            height=DEPTH_CAMERA_HW[0],
-            data_types=("depth",),
-        )
-        cfg.scene.sensors = (cfg.scene.sensors or ()) + (depth_cam,)
-        cfg.observations["depth"] = ObservationGroupCfg(
-            terms={
-                "depth": ObservationTermCfg(
-                    func=depth_image,
-                    params={
-                        "sensor_name": DEPTH_CAMERA_NAME,
-                        "cutoff_distance": DEPTH_CUTOFF,
-                    },
-                ),
-            },
-            concatenate_terms=True,
-            enable_corruption=False,
-            nan_policy="sanitize",
-        )
-        student_terms = {
-            name: deepcopy(term)
-            for name, term in cfg.observations["actor"].terms.items()
-            if name != "base_lin_vel"
-        }
-        cfg.observations["student_proprio"] = ObservationGroupCfg(
-            terms=student_terms,
-            concatenate_terms=True,
-            enable_corruption=cfg.observations["actor"].enable_corruption,
-            nan_policy="sanitize",
-        )
 
     # --- Akcje: skala per-siłownik; kręgosłup ewentualnie poza polityką ---
     base_action = cfg.actions["joint_pos"]
@@ -322,31 +235,6 @@ def env_cfg(
             "z_scale_range": (0.9, 1.1),
         },
     )
-    if with_depth:
-        cfg.events["cam_pos"] = EventTermCfg(
-            mode="startup",
-            func=dr.cam_pos,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot", camera_names=(DEPTH_CAMERA_NAME,)
-                ),
-                "operation": "add",  # przesunięcie w metrach: +-5 mm
-                "ranges": (-0.005, 0.005),
-            },
-        )
-        cfg.events["cam_quat"] = EventTermCfg(
-            mode="startup",
-            func=dr.cam_quat,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot", camera_names=(DEPTH_CAMERA_NAME,)
-                ),
-                "roll_range": (-0.02, 0.02),
-                "pitch_range": (-0.02, 0.02),
-                "yaw_range": (-0.02, 0.02),
-            },
-        )
-
 
     # --- Curriculum: siła domain randomization rośnie 0 -> 100% ---
     curriculum_events = [
@@ -381,39 +269,5 @@ def env_cfg(
         func=mdp.illegal_contact,
         params={"sensor_name": trunk_ground_cfg.name},
     )
-
-    # --- Tryb play (podgląd nauczonej polityki) ---
-    if play:
-        cfg.episode_length_s = int(1e9)
-        cfg.observations["actor"].enable_corruption = False
-        cfg.events.pop("push_robot", None)
-        cfg.terminations.pop("out_of_terrain_bounds", None)
-        cfg.curriculum = {}
-
-        assert cfg.scene.terrain is not None
-        generator = cfg.scene.terrain.terrain_generator
-        assert generator is not None
-        generator.curriculum = True
-        generator.num_rows = 10
-        generator.border_width = 20.0
-        # `num_cols` celowo nie ustawiamy: przy `curriculum=True` generator i tak
-        # je ignoruje i robi jedną kolumnę na typ terenu. Wiersz = poziom trudności,
-        # kolumna = rodzaj przeszkody.
-        num_cols = len(generator.sub_terrains)
-
-        # Równa obsada każdego pola siatki zamiast losowego rozrzutu: cały
-        # curriculum widać naraz. Liczba środowisk MUSI wyjść z siatki, inaczej
-        # `assign_terrain_grid` zgłosi błąd.
-        cfg.scene.num_envs = robodog_mdp.required_num_envs(
-            generator.num_rows, num_cols, PLAY_ROBOTS_PER_TERRAIN_CELL
-        )
-        # Tryb `startup`, nie `reset`: odpala się raz, PRZED pierwszym resetem, więc
-        # `reset_base` od razu widzi właściwe `env_origins`. Zdarzenie `reset`
-        # dopisane na końcu słownika zadziałałoby dopiero na następny epizod.
-        cfg.events["assign_terrain_grid"] = EventTermCfg(
-            mode="startup",
-            func=robodog_mdp.assign_terrain_grid,
-            params={"robots_per_cell": PLAY_ROBOTS_PER_TERRAIN_CELL},
-        )
 
     return cfg

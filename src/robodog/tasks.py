@@ -1,48 +1,38 @@
-"""Rejestracja zadań velocity dla Silver Badgera w rejestrze mjlab.
-
-Import tego modułu (pośrednio przez `import robodog`) rejestruje ID zadania,
-dzięki czemu widzą je `mjlab.scripts.train` / `play`.
-"""
+""" Rejestracja zadań Silver Badgera w rejestrze mjlab """
 
 from mjlab.tasks.registry import register_mjlab_task
 from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
 
 from robodog.algorithms.runners.distillation_runner import MjlabDistillationRunner
-from robodog.environment.env_cfg import env_cfg
+from robodog.environment.variants import as_play, baseline_cfg, cnn_cfg, distill_cfg
 from robodog.training.distillation_cfg import distillation_runner_cfg
 from robodog.training.rl_cfg import cnn_ppo_runner_cfg, ppo_runner_cfg
 
-
+# Baseline MLP: teren wklejony w płaski wektor obserwacji.
 register_mjlab_task(
     task_id="Mjlab-Silver-Badger",
-    env_cfg=env_cfg(lock_spine=True),
-    play_env_cfg=env_cfg(play=True, lock_spine=True),
+    env_cfg=baseline_cfg(),
+    play_env_cfg=as_play(baseline_cfg()),
     rl_cfg=ppo_runner_cfg(),
     runner_cls=VelocityOnPolicyRunner,
 )
 
+# Wariant CNN: teren jako obraz 2D + własne sieci konwolucyjne. Ten sam robot
+# i teren co w baseline, inny sposób przetwarzania otoczenia — do porównania.
 register_mjlab_task(
-    task_id="Mjlab-Velocity-Rough-Silver-Badger-CNN",
-    env_cfg= env_cfg(lock_spine=True, terrain_as_image=True),
-    play_env_cfg=env_cfg(
-        play=True, lock_spine=True, terrain_as_image=True
-    ),
+    task_id="Mjlab-Silver-Badger-CNN",
+    env_cfg=cnn_cfg(),
+    play_env_cfg=as_play(cnn_cfg()),
     rl_cfg=cnn_ppo_runner_cfg(),
     runner_cls=VelocityOnPolicyRunner,
 )
 
-_distill_env_cfg = env_cfg(
-    lock_spine=True, terrain_as_image=True, with_depth=True
-)
-# Render głębi + kolizje korpusu + height_scan = ciężkie; startowo mało środowisk
-# (do dostrojenia pod VRAM). Distylacja i tak potrzebuje mniej danych niż RL.
-_distill_env_cfg.scene.num_envs = 256
+# Distylacja teacher -> student. Teacher wczytuje się z checkpointu CNN przez
+# `--agent.resume True --agent.load-run <run>`.
 register_mjlab_task(
-    task_id="Mjlab-Velocity-Rough-Silver-Badger-Distill",
-    env_cfg=_distill_env_cfg,
-    play_env_cfg=env_cfg(
-        play=True, lock_spine=True, terrain_as_image=True, with_depth=True
-    ),
+    task_id="Mjlab-Silver-Badger-Distill",
+    env_cfg=distill_cfg(),
+    play_env_cfg=as_play(distill_cfg()),
     rl_cfg=distillation_runner_cfg(),
     runner_cls=MjlabDistillationRunner,
 )
