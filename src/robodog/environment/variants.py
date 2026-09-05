@@ -1,18 +1,4 @@
-"""Warianty środowiska Silver Badgera zbudowane na wspólnej bazie z `env_cfg`.
-
-Zamiast jednej funkcji z pękiem flag logicznych mamy tu jedną bazę i kilka
-funkcji, które ją przekształcają. Dzięki temu odpowiedź na pytanie „czym różni
-się distylacja od CNN" mieści się w kilku linijkach zamiast w rozsianych `if`-ach.
-
-Warianty różnią się tym, CO polityka widzi:
-
-  * `baseline_cfg`  — skan terenu wklejony w płaski wektor obserwacji (MLP),
-  * `cnn_cfg`       — ten sam skan wystawiony jako obraz 2D pod własną sieć CNN,
-  * `distill_cfg`   — jak CNN, plus kamera głębi i grupy obserwacji dla studenta.
-
-`as_play` jest prostopadłe do powyższych: przełącza DOWOLNY wariant w tryb
-podglądu nauczonej polityki i z założenia stosuje się jako ostatnie.
-"""
+""" Warianty środowiska Silver Badgera zbudowane na wspólnej bazie z env_cfg """
 
 from copy import deepcopy
 
@@ -36,9 +22,10 @@ from .constants import (
     DEPTH_CUTOFF,
     PLAY_ROBOTS_PER_TERRAIN_CELL,
     TERRAIN_SCAN_GRID_HW,
+    TERRAIN_SCAN_SENSOR_NAME,
 )
 from .env_cfg import env_cfg
-from .observations import depth_image, height_scan_image
+from .mdp import depth_image, height_scan_image
 
 # Render głębi + kolizje korpusu + height_scan = ciężkie; startowo mało środowisk
 # (do dostrojenia pod VRAM). Distylacja i tak potrzebuje mniej danych niż RL.
@@ -124,7 +111,7 @@ def _use_terrain_image(cfg: ManagerBasedRlEnvCfg) -> None:
             "scan": ObservationTermCfg(
                 func=height_scan_image,
                 params={
-                    "sensor_name": "terrain_scan",
+                    "sensor_name": TERRAIN_SCAN_SENSOR_NAME,
                     "grid_hw": TERRAIN_SCAN_GRID_HW,
                     "offset": TERRAIN_SCAN_SITE_HEIGHT,
                 },

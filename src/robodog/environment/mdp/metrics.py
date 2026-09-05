@@ -12,8 +12,6 @@ import torch
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
 
-from mjlab.managers.metrics_manager import MetricsTermCfg
-
 # Nazwa członu komendy prędkości w konfiguracji velocity mjlab.
 TWIST_COMMAND_NAME = "twist"
 
@@ -54,14 +52,3 @@ def realized_lin_vel_x(
 ) -> torch.Tensor:
     """ Faktycznie osiągana prędkość do przodu [m/s] ze znakiem """
     return env.scene[asset_name].data.root_link_lin_vel_b[:, 0]  # (B,)
-
-def add_velocity_metrics(
-    metrics: dict[str, MetricsTermCfg],
-    command_name: str = TWIST_COMMAND_NAME,
-) -> None:
-    """ Dopisuje metryki śledzenia prędkości do słownika metryk środowiska """
-    params = {"command_name": command_name}
-    metrics["vel_error_xy"] = MetricsTermCfg(func=lin_vel_error_xy, params=params)
-    metrics["vel_error_yaw"] = MetricsTermCfg(func=ang_vel_error_yaw, params=params)
-    metrics["vel_cmd_x"] = MetricsTermCfg(func=commanded_lin_vel_x, params=params)
-    metrics["vel_realized_x"] = MetricsTermCfg(func=realized_lin_vel_x)

@@ -3,6 +3,14 @@
 FOOT_SITES = ("RL_foot", "RR_foot", "FR_foot", "FL_foot")
 FOOT_GEOMS = ("RL_foot", "RR_foot", "FR_foot", "FL_foot")
 
+# --- Nazwy sensorów w scenie ---
+# Trzymane jako stałe, bo odwołują się do nich moduły, które nie budują sensorów:
+# nagroda `upright` (lokalne nachylenie terenu), obserwacja CNN i terminacje.
+TERRAIN_SCAN_SENSOR_NAME = "terrain_scan"          # z bazy mjlab
+FOOT_HEIGHT_SCAN_SENSOR_NAME = "foot_height_scan"  # z bazy mjlab
+FEET_CONTACT_SENSOR_NAME = "feet_ground_contact"   # nasz
+TRUNK_CONTACT_SENSOR_NAME = "trunk_ground_touch"   # nasz
+
 # Wzorce nazw siłowników NÓG (bez kręgosłupa). Gdy usztywniamy kręgosłup,
 # polityka steruje tylko tymi 12 stawami — `spine_joint` zostaje poza akcją.
 LEG_ACTUATOR_PATTERNS = (r".*_hip_joint", r".*_thigh_joint", r".*_calf_joint")
