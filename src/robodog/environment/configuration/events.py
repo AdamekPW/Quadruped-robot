@@ -15,8 +15,16 @@ def prepare_events(events: dict[str, EventTermCfg]) -> None:
     # `pseudo_inertia` przez `t1..t3_range`.
     events.pop("base_com")
     events["encoder_bias"].mode = "reset"
-    events["foot_friction"].mode = "interval"
-    events["foot_friction"].interval_range_s = (4.0, 10.0)
+    # Losowanie RAZ NA EPIZOD, nie co kilka sekund. Zmiana tarcia pod stopami w
+    # trakcie epizodu to model wjechania na plamę lodu, a curriculum terenu
+    # rozlicza cały epizod — przy `interval` poziom ustawiał się na najgorszym
+    # losowaniu, nie na warunkach epizodu.
+    events["foot_friction"].mode = "reset"
+    # Dolna granica wyznacza maksymalne nachylenie, na które robot w OGÓLE wejdzie:
+    # nie wchodzi się na zbocze stromsze niż współczynnik tarcia. Bazowe 0.3 to
+    # mokra glazura — blokowało curriculum na `hf_pyramid_slope_inv` przy ~1.5.
+    # 0.7-1.2 to guma na suchym podłożu (beton, drewno, ubita ziemia).
+    events["foot_friction"].params["ranges"] = (0.7, 1.2)
     events["foot_friction"].params["asset_cfg"].geom_names = FOOT_GEOMS
     events["pd_gains"] = EventTermCfg(
         mode="reset",

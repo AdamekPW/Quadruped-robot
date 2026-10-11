@@ -9,6 +9,7 @@ from .actions import DelayedJointPositionAction, DelayedJointPositionActionCfg
 from .curriculums import dr_curriculum
 from .domain_randomization import gravity
 from .observations import depth_image, height_scan_image
+from .terrain_mastery import terrain_mastery
 from .terrain_placement import assign_terrain_grid, required_num_envs
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "gravity",
     "height_scan_image",
     "required_num_envs",
+    "terrain_mastery",
 ]
