@@ -11,6 +11,7 @@ import torch
 
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
+    from mjlab.managers import SceneEntityCfg
 
 # Nazwa członu komendy prędkości w konfiguracji velocity mjlab.
 TWIST_COMMAND_NAME = "twist"
@@ -52,3 +53,13 @@ def realized_lin_vel_x(
 ) -> torch.Tensor:
     """ Faktycznie osiągana prędkość do przodu [m/s] ze znakiem """
     return env.scene[asset_name].data.root_link_lin_vel_b[:, 0]  # (B,)
+
+
+def spine_angle(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg
+) -> torch.Tensor:
+    """ Bezwzględny kąt zgięcia kręgosłupa w danym kroku [rad] """
+    joint_pos = env.scene[asset_cfg.name].data.joint_pos[:, asset_cfg.joint_ids].squeeze(-1) # (B,)
+    return torch.abs(joint_pos)
+
