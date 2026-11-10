@@ -7,12 +7,77 @@ name = "robodog"
 version = "0.1.0"
 description = "Nauka chodzenia robopsa metodą uczenia przez wzmacnianie (praca magisterska)"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 
-# Celowo pusto. Zależności (torch, mujoco, ...) są w environment.yml, bo pin
-# torcha wymaga dodatkowego indeksu CUDA, którego pyproject.toml nie potrafi
-# przenośnie wyrazić. Trzymanie ich w dwóch miejscach skończyłoby się rozjazdem.
-dependencies = []
+# Środowisko zarządzane przez uv:
+#   uv sync                  # tworzy/aktualizuje ./.venv dokładnie wg uv.lock
+#   uv run pytest            # uruchamia polecenie w tym środowisku
+#   uv add pakiet==wersja    # dodaje zależność (pyproject.toml + uv.lock)
+# Na klastrze: `uv sync --frozen` — instaluje wersje z locka bez ich zmiany.
+#
+# Pakiet robodog instaluje się w trybie edytowalnym automatycznie przy `uv sync`.
+dependencies = [
+    # --- Deep learning ---
+    # Build cu128 (CUDA 12.8) — wymagany przez GPU Blackwell (RTX 5060 Ti, sm_120);
+    # starsze buildy na tej karcie nie wystartują. Indeks przypisany niżej
+    # w [tool.uv.sources].
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+
+    # --- Framework RL: mjlab ---
+    # Isaac Lab API (opis środowiska z klocków: obserwacje / nagrody / zdarzenia)
+    # + MuJoCo Warp (mjwarp) = MuJoCo liczone na GPU, tysiące środowisk równolegle.
+    # Pociąga za sobą: mujoco-warp, warp-lang, rsl-rl-lib (PPO), viser, wandb.
+    # Uwaga: mjlab wymaga mujoco~=3.10.0 i numpy<2.5 — piny niżej są z tym zgodne.
+    "mjlab==1.5.1",
+
+    # --- Symulacja fizyki ---
+    "mujoco==3.10.0",
+
+    # --- Renderowanie środowisk MuJoCo (podgląd / zapis wideo) ---
+    "imageio==2.37.3",
+    "imageio-ffmpeg==0.6.0",
+
+    # --- Numeryka ---
+    "numpy==2.4.4",
+]
+
+[dependency-groups]
+# Grupa `dev` jest instalowana domyślnie przez `uv sync`.
+dev = [
+    "pytest==9.1.1",
+]
+
+[tool.uv]
+# Rozwiązujemy zależności tylko dla Linuksa — buildy cu128 i tak są linuksowe,
+# a bez tego uv próbowałby znaleźć torcha z indeksu CUDA także dla macOS/Windows.
+environments = ["sys_platform == 'linux'"]
+
+# Python zawsze pobrany przez uv, nigdy „znaleziony" w systemie. Bez tego uv
+# bierze dowolny pasujący interpreter — np. z aktywnej Condy albo z modułu na
+# klastrze — i .venv przestaje działać, gdy tamto środowisko zniknie.
+python-preference = "only-managed"
+
+# !!! REGRESJA mujoco-warp 3.10.0.2 (szczegóły: docs/mjlab-architektura.md) !!!
+# Zadania `velocity` (Go1, G1) padają z CUDA error 700 przy num_envs >= ~176,
+# a trening wymaga 4096. Działa 3.10.0.1, ale mjlab pinuje
+# `mujoco-warp>=3.10.0.2`. Override każe uv zignorować to wymaganie mjlab
+# i wziąć naszą wersję. Pilnuje tego test:
+# tests/environment_version_test.py::test_mujoco_warp_has_no_known_regression
+override-dependencies = [
+    "mujoco-warp==3.10.0.1",
+]
+
+# Indeks PyTorcha z buildami CUDA 12.8. `explicit = true` — korzystają z niego
+# tylko paczki wskazane w [tool.uv.sources]; reszta idzie z PyPI.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
 
 # Rejestracja zadań RoboDoga w mjlab: mjlab przy imporcie ładuje pakiety z tej
 # grupy entry-pointów i uruchamia ich rejestrację (register_mjlab_task).

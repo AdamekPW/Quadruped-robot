@@ -12,14 +12,14 @@ import pytest
 
 
 def test_robodog_package_is_importable():
-    """Wymaga `pip install -e .` — łapie najczęstszy błąd konfiguracji."""
+    """Wymaga `uv sync` (instaluje robodog edytowalnie) — łapie najczęstszy błąd konfiguracji."""
     import robodog
 
     assert robodog.__doc__ is not None
 
 
 def test_key_dependency_versions():
-    """Piny z environment.yml zgadzają się z tym, co faktycznie zainstalowano."""
+    """Piny z pyproject.toml zgadzają się z tym, co faktycznie zainstalowano."""
     import mujoco
     import torch
 
@@ -52,14 +52,15 @@ def test_mujoco_warp_has_no_known_regression():
 
     To blokuje projekt, bo trening potrzebuje 4096 środowisk.
 
-    mjlab pinuje `mujoco-warp>=3.10.0.2`, więc pip sam zainstaluje zepsutą
-    wersję, a poprawnej nie da się zapisać w environment.yml (pip zgłasza
-    ResolutionImpossible). Ten test jest jedynym zabezpieczeniem — szczegóły
-    w docs/mjlab-architektura.md.
+    mjlab pinuje `mujoco-warp>=3.10.0.2`, więc bez interwencji instalator weźmie
+    zepsutą wersję. Wymuszamy 3.10.0.1 przez `override-dependencies` w
+    pyproject.toml; ten test łapie sytuację, w której ktoś override usunie
+    albo zainstaluje środowisko z pominięciem uv. Szczegóły w
+    docs/mjlab-architektura.md.
     """
     assert version("mujoco-warp") == "3.10.0.1", (
         "Wykryto mujoco-warp != 3.10.0.1. Jeśli to 3.10.0.2, trening padnie przy "
-        "num_envs >= ~176. Napraw: pip install --no-deps mujoco-warp==3.10.0.1"
+        "num_envs >= ~176. Sprawdź override-dependencies w pyproject.toml i uruchom `uv sync`."
     )
 
 

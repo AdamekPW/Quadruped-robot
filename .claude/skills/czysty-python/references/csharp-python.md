@@ -31,7 +31,7 @@
 | `enum` | `enum.Enum` / `StrEnum` | |
 | `internal` / `private` | prefiks `_nazwa` (konwencja) | Nie ma egzekwowania — to umowa, nie kompilator |
 | `readonly` | `Final[...]` (pyright) / `frozen=True` | W runtime nic nie chroni |
-| NuGet | pip / conda | Tu: zależności w `environment.yml` |
+| NuGet | pip / uv | Tu: zależności w `pyproject.toml`, wersje w `uv.lock` (`uv add`) |
 | xUnit `[Fact]` | pytest: funkcja `def test_x()` | Bez klas, bez atrybutów, `assert` zwykły |
 | DI container | przekazywanie funkcji/obiektów w argumentach | Kontenery DI są w Pythonie rzadkością i zwykle przerostem formy |
 

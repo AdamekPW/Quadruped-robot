@@ -1,3 +1,10 @@
+# /// script
+# requires-python = "==3.12.*"
+# dependencies = [
+#     "wandb==0.29.0",
+#     "wandb-workspaces==0.4.11",
+# ]
+# ///
 """Generator raportu wandb z wykresami zbiorczymi dla treningu RoboDoga.
 
 Po co: wandb domyślnie robi JEDEN panel na metrykę, więc `Curriculum/terrain_levels/*`
@@ -10,10 +17,10 @@ można napisać, JAK powstał wykres, zamiast opisywać kliknięcia.
 
 UWAGA — INNE ŚRODOWISKO NIŻ TRENING.
 `wandb-workspaces` wymaga wandb >= 0.28.2, a środowisko treningowe ma
-przypięte 0.28.1. Żeby go nie ruszać, skrypt biega we własnym venv:
-
-    python -m venv ~/.venvs/robodog-wandb
-    ~/.venvs/robodog-wandb/bin/pip install wandb-workspaces
+przypięte 0.28.1. Żeby go nie ruszać, skrypt deklaruje własne zależności
+w bloku `# /// script` (PEP 723) na górze pliku. `uv run` widzi ten blok,
+pomija zależności projektu i buduje dla skryptu osobne, zapamiętane w cache
+środowisko.
 
 Dwa cele, bo służą do czego innego:
 
@@ -25,9 +32,9 @@ Dwa cele, bo służą do czego innego:
 
 Użycie:
 
-    ~/.venvs/robodog-wandb/bin/python scripts/wandb_report.py
-    ~/.venvs/robodog-wandb/bin/python scripts/wandb_report.py --target report
-    ~/.venvs/robodog-wandb/bin/python scripts/wandb_report.py --target both --dry-run
+    uv run scripts/wandb_report.py
+    uv run scripts/wandb_report.py --target report
+    uv run scripts/wandb_report.py --target both --dry-run
 """
 
 from __future__ import annotations
