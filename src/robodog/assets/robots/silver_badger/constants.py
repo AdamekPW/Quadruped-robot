@@ -44,13 +44,24 @@ def get_spec() -> mujoco.MjSpec:
     return spec
 
 
+# --- Kręgosłup ---
+SPINE_JOINT_NAME = "spine_joint"
+
+
+def get_locked_spine_spec() -> mujoco.MjSpec:
+    """Wczytuje MjSpec Silver Badgera bez stawu kręgosłupa (tułów jako jedna bryła)."""
+    spec = get_spec()
+    spec.delete(spec.joint(SPINE_JOINT_NAME))
+    return spec
+
+
 
 STIFFNESS = 20.0 # jak mocno silnik "ciągnie" do zadanego kąta (jak sztywność sprężyny)
 DAMPING = 0.5 # jak mocno hamuje ruch (aby staw nie oscylował)
 ARMATURE = 0.013122 # bezwładność wirnika "odbita" przez przekładnie
 
 SPINE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
-    target_names_expr=("spine_joint",),
+    target_names_expr=(SPINE_JOINT_NAME,),
     stiffness=STIFFNESS,
     damping=DAMPING,
     effort_limit=48.0,
@@ -65,15 +76,24 @@ LEG_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     armature=ARMATURE,
 )
 
+_LEG_JOINT_POS = {
+    "RL_hip_joint": -0.1, "RL_thigh_joint": -0.8, "RL_calf_joint": 1.5,
+    "RR_hip_joint": 0.1, "RR_thigh_joint": 0.8, "RR_calf_joint": -1.5,
+    "FR_hip_joint": -0.1, "FR_thigh_joint": 0.8, "FR_calf_joint": -1.5,
+    "FL_hip_joint": 0.1, "FL_thigh_joint": -0.8, "FL_calf_joint": 1.5,
+}
+
 INIT_STATE = EntityCfg.InitialStateCfg(
     pos=(0.0, 0.0, 0.316), # pozycja tułowia w metrach (x, y, h), chcemy aby stał na nogach
-    joint_pos={
-        "spine_joint": 0.0,
-        "RL_hip_joint": -0.1, "RL_thigh_joint": -0.8, "RL_calf_joint": 1.5,
-        "RR_hip_joint": 0.1, "RR_thigh_joint": 0.8, "RR_calf_joint": -1.5,
-        "FR_hip_joint": -0.1, "FR_thigh_joint": 0.8, "FR_calf_joint": -1.5,
-        "FL_hip_joint": 0.1, "FL_thigh_joint": -0.8, "FL_calf_joint": 1.5,
-    },
+    joint_pos={SPINE_JOINT_NAME: 0.0, **_LEG_JOINT_POS},
+    joint_vel={".*": 0.0},
+)
+
+# Bez stawu kręgosłupa poza nie może go wymieniać: mjlab zgłasza błąd na każdy
+# wzorzec, który nie pasuje do żadnego stawu modelu.
+INIT_STATE_LOCKED_SPINE = EntityCfg.InitialStateCfg(
+    pos=INIT_STATE.pos,
+    joint_pos=dict(_LEG_JOINT_POS),
     joint_vel={".*": 0.0},
 )
 
@@ -108,25 +128,36 @@ FULL_COLLISION = CollisionCfg(
     disable_other_geoms=True,
 )
 
+_SOFT_JOINT_POS_LIMIT_FACTOR = 0.9 # miękki limit zakresu stawów, polityka jest zniechęcana do wchodzenia w ostatnie 10% zakresu
+
 SILVER_BADGER_ARTICULATION = EntityArticulationInfoCfg(
     actuators=(SPINE_ACTUATOR_CFG, LEG_ACTUATOR_CFG),
-    soft_joint_pos_limit_factor=0.9, # miękki limit zakresu stawów, polityka jest zniechęcana do wchodzenia w ostatnie 10% zakresu
+    soft_joint_pos_limit_factor=_SOFT_JOINT_POS_LIMIT_FACTOR,
 )
 
-def get_silver_badger_robot_cfg(full_collision: bool = False) -> EntityCfg:
-    """Zwraca świeżą konfigurację encji Silver Badgera.
+# Bez stawu kręgosłupa nie ma też czego napędzać — zostają tylko siłowniki nóg.
+SILVER_BADGER_LOCKED_SPINE_ARTICULATION = EntityArticulationInfoCfg(
+    actuators=(LEG_ACTUATOR_CFG,),
+    soft_joint_pos_limit_factor=_SOFT_JOINT_POS_LIMIT_FACTOR,
+)
 
-    Nowa instancja przy każdym wywołaniu - żeby współdzielenie configu w wielu miejscach nie prowadziło do konfliktów
+
+def get_silver_badger_robot_cfg(
+    full_collision: bool = False, *, lock_spine: bool = False
+) -> EntityCfg:
+    """Zwraca świeżą konfigurację encji Silver Badgera jako nową instację w każdym wywołaniu.
 
     Args:
-        full_collision: gdy False (domyślnie) kolizje mają tylko stopy - lekkie, pod teren płaski. Gdy True włącza
-        kolizje całego korpusu (`FULL_COLLISION`) - tułów/kręgosłup/uda/golenie zderzają się z terenem zamiast przez niego przenikać. 
+        full_collision: gdy False (domyślnie) kolizje mają tylko stopy, dla True cały korpus
+        lock_spine: gdy True model nie ma stawu ani siłownika kręgosłupa
     """
     return EntityCfg(
-        init_state=INIT_STATE,
+        init_state=INIT_STATE_LOCKED_SPINE if lock_spine else INIT_STATE,
         collisions=(FULL_COLLISION if full_collision else FEET_ONLY_COLLISION,),
-        spec_fn=get_spec,
-        articulation=SILVER_BADGER_ARTICULATION,
+        spec_fn=get_locked_spine_spec if lock_spine else get_spec,
+        articulation=(
+            SILVER_BADGER_LOCKED_SPINE_ARTICULATION if lock_spine else SILVER_BADGER_ARTICULATION
+        ),
     )
 
 # Mapowanie wyniku sieci (z zakresu [-1, 1]) na sensowny kąt
@@ -139,10 +170,13 @@ for _a in SILVER_BADGER_ARTICULATION.actuators:
 
 
 if __name__ == "__main__":
-    # Headless-safe: kompiluje encję i wypisuje diagnostykę (bez okna GLFW).
     from mjlab.entity.entity import Entity
 
-    robot = Entity(get_silver_badger_robot_cfg())
-    model = robot.spec.compile()
-    print(f"Encja Silver Badger OK: nq={model.nq} nu={model.nu} njnt={model.njnt}")
+    for lock_spine in (False, True):
+        robot = Entity(get_silver_badger_robot_cfg(lock_spine=lock_spine))
+        model = robot.spec.compile()
+        print(
+            f"Encja Silver Badger (lock_spine={lock_spine}) OK: "
+            f"nq={model.nq} nu={model.nu} njnt={model.njnt}"
+        )
     print("Skala akcji:", SILVER_BADGER_ACTION_SCALE)

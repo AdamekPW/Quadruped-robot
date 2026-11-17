@@ -6,8 +6,10 @@ from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import ActionTermCfg
 
 from .. import mdp as robodog_mdp
-from ..constants import LEG_ACTUATOR_PATTERNS
-from robodog.assets.robots.silver_badger.constants import SILVER_BADGER_ACTION_SCALE
+from robodog.assets.robots.silver_badger.constants import (
+    SILVER_BADGER_ACTION_SCALE,
+    SPINE_JOINT_NAME,
+)
 
 # Opóźnienie akcji: do jednego kroku sterowania (20 ms przy 50 Hz), z 5% szansą
 # na dodatkowy jitter - tyle mniej więcej wynosi opóźnienie realnego łańcucha.
@@ -19,8 +21,7 @@ def prepare_actions(actions: dict[str, ActionTermCfg], *, lock_spine: bool) -> N
     """Podmienia człon akcji na wariant z opóźnieniem i ustawia skalę per-siłownik.
 
     Args:
-        lock_spine: gdy True polityka NIE dostaje kanału na kręgosłup - steruje
-            tylko 12 stawami nóg, a `spine_joint` trzyma neutralny kąt swoim PD.
+        lock_spine: gdy True model nie ma stawu kręgosłupa.
     """
     base_action = actions["joint_pos"]
     assert isinstance(base_action, JointPositionActionCfg)
@@ -40,6 +41,5 @@ def prepare_actions(actions: dict[str, ActionTermCfg], *, lock_spine: bool) -> N
 
     action_scale = dict(SILVER_BADGER_ACTION_SCALE)
     if lock_spine:
-        joint_pos_action.actuator_names = LEG_ACTUATOR_PATTERNS
-        action_scale.pop("spine_joint", None)
+        del action_scale[SPINE_JOINT_NAME]
     joint_pos_action.scale = action_scale

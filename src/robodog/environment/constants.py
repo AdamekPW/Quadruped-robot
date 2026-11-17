@@ -11,10 +11,6 @@ FOOT_HEIGHT_SCAN_SENSOR_NAME = "foot_height_scan"  # z bazy mjlab
 FEET_CONTACT_SENSOR_NAME = "feet_ground_contact"   # nasz
 TRUNK_CONTACT_SENSOR_NAME = "trunk_ground_touch"   # nasz
 
-# Wzorce nazw siłowników NÓG (bez kręgosłupa). Gdy usztywniamy kręgosłup,
-# polityka steruje tylko tymi 12 stawami — `spine_joint` zostaje poza akcją.
-LEG_ACTUATOR_PATTERNS = (r".*_hip_joint", r".*_thigh_joint", r".*_calf_joint")
-
 # Kształt siatki skanu terenu (height_scan) jako obraz 2D: (H, W).
 # Sensor `terrain_scan` to GridPattern size=(1.6, 1.0), resolution=0.1 → rzuty
 # generowane meshgridem indexing="xy" i spłaszczane wierszowo. Daje to siatkę

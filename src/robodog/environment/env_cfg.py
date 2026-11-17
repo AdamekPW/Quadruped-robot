@@ -9,7 +9,7 @@ from robodog.assets.robots.silver_badger.constants import TERRAIN_SCAN_SITE_HEIG
 from .configuration.actions import prepare_actions
 from .configuration.curriculum import prepare_curriculum
 from .configuration.events import prepare_events
-from .configuration.metrics import add_velocity_metrics
+from .configuration.metrics import add_spine_metrics, add_velocity_metrics
 from .configuration.rewards import prepare_rewards
 from .configuration.scene import prepare_scene
 from .configuration.sensors import prepare_sensors
@@ -17,12 +17,16 @@ from .constants import TRUNK_CONTACT_SENSOR_NAME
 
 
 def env_cfg(*, lock_spine: bool = True) -> ManagerBasedRlEnvCfg:
-    """ Bazowe zadanie velocity Silver Badgera na terenie nierównym (+ curriculum) """
+    """Bazowe zadanie velocity Silver Badgera na terenie nierównym (+ curriculum).
+
+    Args:
+        lock_spine: gdy True (domyślnie) robot nie ma stawu kręgosłupa.
+    """
 
     cfg = make_velocity_env_cfg()
 
     cfg.scene.num_envs = 2048
-    prepare_scene(cfg)
+    prepare_scene(cfg, lock_spine=lock_spine)
     prepare_sensors(cfg.scene)
 
     # --- Komendy: więcej marszu NA WPROST + rzadsza zmiana kierunku ---
@@ -32,6 +36,8 @@ def env_cfg(*, lock_spine: bool = True) -> ManagerBasedRlEnvCfg:
     twist_cmd.rel_standing_envs = 0.05
 
     add_velocity_metrics(cfg.metrics)
+    if not lock_spine:
+        add_spine_metrics(cfg.metrics)
 
     cfg.observations["actor"].nan_policy = "sanitize"
     cfg.observations["critic"].nan_policy = "sanitize"
@@ -46,7 +52,7 @@ def env_cfg(*, lock_spine: bool = True) -> ManagerBasedRlEnvCfg:
 
     prepare_actions(cfg.actions, lock_spine=lock_spine)
 
-    prepare_rewards(cfg.rewards)
+    prepare_rewards(cfg.rewards, lock_spine=lock_spine)
 
     prepare_events(cfg.events)
 

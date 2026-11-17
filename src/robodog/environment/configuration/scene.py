@@ -30,9 +30,15 @@ _MAX_TERRAIN_SLOPE = 0.4
 _SLOPED_SUB_TERRAINS = ("hf_pyramid_slope", "hf_pyramid_slope_inv")
 
 
-def prepare_scene(cfg: ManagerBasedRlEnvCfg) -> None:
-    """ Wstawia robota, stroi solver i włącza curriculum terenu """
-    cfg.scene.entities = {"robot": get_silver_badger_robot_cfg(full_collision=True)}
+def prepare_scene(cfg: ManagerBasedRlEnvCfg, *, lock_spine: bool) -> None:
+    """Wstawia robota, stroi solver i włącza curriculum terenu.
+
+    Args:
+        lock_spine: gdy True robot nie ma stawu kręgosłupa
+    """
+    cfg.scene.entities = {
+        "robot": get_silver_badger_robot_cfg(full_collision=True, lock_spine=lock_spine)
+    }
 
     cfg.sim.mujoco.ccd_iterations = _CCD_ITERATIONS
     cfg.sim.mujoco.impratio = _IMPRATIO

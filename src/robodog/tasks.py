@@ -1,5 +1,6 @@
 """ Rejestracja zadań Silver Badgera w rejestrze mjlab """
 
+from mjlab.rl import RslRlOnPolicyRunnerCfg
 from mjlab.tasks.registry import register_mjlab_task
 from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
 
@@ -8,31 +9,45 @@ from robodog.environment.variants import as_play, baseline_cfg, cnn_cfg, distill
 from robodog.training.distillation_cfg import distillation_runner_cfg
 from robodog.training.rl_cfg import cnn_ppo_runner_cfg, ppo_runner_cfg
 
-# Baseline MLP: teren wklejony w płaski wektor obserwacji.
-# register_mjlab_task(
-#     task_id="Mjlab-Silver-Badger",
-#     env_cfg=baseline_cfg(),
-#     play_env_cfg=as_play(baseline_cfg()),
-#     rl_cfg=ppo_runner_cfg(),
-#     runner_cls=VelocityOnPolicyRunner,
-# )
 
-# Wariant CNN: teren jako obraz 2D + własne sieci konwolucyjne. Ten sam robot
-# i teren co w baseline, inny sposób przetwarzania otoczenia — do porównania.
+def _spine_experiment(cfg: RslRlOnPolicyRunnerCfg) -> RslRlOnPolicyRunnerCfg:
+    """Osobny katalog logów dla ruchomego kręgosłupa, aby checkpointy wariantów się nie mieszały."""
+    cfg.experiment_name = f"{cfg.experiment_name}_spine"
+    return cfg
+
+# Baseline MLP: teren wklejony w płaski wektor obserwacji.
+register_mjlab_task(
+    task_id="Mjlab-Silver-Badger",
+    env_cfg=baseline_cfg(),
+    play_env_cfg=as_play(baseline_cfg()),
+    rl_cfg=ppo_runner_cfg(),
+    runner_cls=VelocityOnPolicyRunner,
+)
+
+# Kręgosłup usztywniony - wariant CNN: teren jako obraz 2D + własne sieci konwolucyjne.
 register_mjlab_task(
     task_id="Mjlab-Silver-Badger-CNN",
+    env_cfg=cnn_cfg(lock_spine=True),
+    play_env_cfg=as_play(cnn_cfg(lock_spine=True)),
+    rl_cfg=cnn_ppo_runner_cfg(),
+    runner_cls=VelocityOnPolicyRunner,
+)
+
+# Kręgosłup ruchomy - wariant CNN
+register_mjlab_task(
+    task_id="Mjlab-Silver-Badger-CNN-Spine",
     env_cfg=cnn_cfg(lock_spine=False),
     play_env_cfg=as_play(cnn_cfg(lock_spine=False)),
-    rl_cfg=cnn_ppo_runner_cfg(),
+    rl_cfg=_spine_experiment(cnn_ppo_runner_cfg()),
     runner_cls=VelocityOnPolicyRunner,
 )
 
 # Distylacja teacher -> student. Teacher wczytuje się z checkpointu CNN przez
 # `--agent.resume True --agent.load-run <run>`.
-# register_mjlab_task(
-#     task_id="Mjlab-Silver-Badger-Distill",
-#     env_cfg=distill_cfg(),
-#     play_env_cfg=as_play(distill_cfg()),
-#     rl_cfg=distillation_runner_cfg(),
-#     runner_cls=MjlabDistillationRunner,
-# )
+register_mjlab_task(
+    task_id="Mjlab-Silver-Badger-Distill",
+    env_cfg=distill_cfg(),
+    play_env_cfg=as_play(distill_cfg()),
+    rl_cfg=distillation_runner_cfg(),
+    runner_cls=MjlabDistillationRunner,
+)

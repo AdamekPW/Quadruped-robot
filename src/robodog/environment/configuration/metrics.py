@@ -2,6 +2,8 @@
 
 from mjlab.managers import MetricsTermCfg, SceneEntityCfg
 
+from robodog.assets.robots.silver_badger.constants import SPINE_JOINT_NAME
+
 from ..mdp.metrics import (
     TWIST_COMMAND_NAME,
     ang_vel_error_yaw,
@@ -23,5 +25,8 @@ def add_velocity_metrics(
     metrics["vel_cmd_x"] = MetricsTermCfg(func=commanded_lin_vel_x, params=params)
     metrics["vel_realized_x"] = MetricsTermCfg(func=realized_lin_vel_x)
 
-    spine_cfg = SceneEntityCfg("robot", joint_names=("spine_joint",))
+
+def add_spine_metrics(metrics: dict[str, MetricsTermCfg]) -> None:
+    """ Dopisuje metryki pracy kręgosłupa (tylko dla wariantu z ruchomym kręgosłupem) """
+    spine_cfg = SceneEntityCfg("robot", joint_names=(SPINE_JOINT_NAME,))
     metrics["spine_abs_angle"] = MetricsTermCfg(func=spine_angle, params={"asset_cfg": spine_cfg})
